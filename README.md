@@ -1,4 +1,4 @@
-# @HCMUT CO3117 Machine Learning Course Repository
+# Machine Learning Course (CO3117- @HCMUT)
 
 ## Project Setup Guide
 
@@ -68,6 +68,7 @@ pip install -r requirements.txt
 ```
 kchan139-ml-course-shibainu/
 ├── dataset/       # Raw and processed data
+├── homework/      # Weekly homework solutions
 ├── models/        # Trained models
 ├── notebooks/     # Jupyter notebooks
 ├── reports/       # Project documentation

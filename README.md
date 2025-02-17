@@ -1,4 +1,4 @@
-# Machine Learning Course (CO3117- @HCMUT)
+# Machine Learning Course (CO3117-HCMUT)
 
 ## Project Setup Guide
 
@@ -13,8 +13,6 @@
 
 #### Prerequisites
 - Python (3.9-3.12)
-- pip
-- git
 
 #### Setup Steps
 
@@ -77,14 +75,45 @@ kchan139-ml-course-shibainu/
 ```
 
 ### Contributing
-1. Clone and switch to the develop branch:
+
+##### I. Ensure Your Fork and Branch are Up-to-Date
+
+1. Add the original repository as a remote (if not done earlier):
+```bash
+   git remote add upstream https://github.com/kchan139/ml-course-shibainu
 ```
-   git clone <repo-url>
+2. Fetch the latest changes:
+```bash
+   git fetch upstream
+```
+3. Switch to your local `develop` branch and merge the changes:
+```bash
    git checkout develop
+   git merge upstream/develop
 ```
-2. Create feature branch: `git checkout -b feature/<feature-name>`
-3. Commit changes
-4. Push and create pull request
+4. Push the updated `develop` to your forked repository:
+```bash
+   git push origin develop
+```
+
+##### II. Create a Model Branch
+1. Create and switch to a new branch (if not done earlier):
+```bash
+   git checkout -b model/your-model
+```
+2. Make changes
+3. Stage and commit your changes:
+```bash
+   git add .
+   git commit -m "desciption of your changes"
+```
+4. Push the feature branch to your fork:
+```bash
+   git push origin model/your-model
+```
+
+##### III. Create a Pull Request on GitHub
+
 
 ### License
 MIT License

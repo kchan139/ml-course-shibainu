@@ -1,6 +1,3 @@
-def initialize():
-    print("Hello, world!")
+# tests/__init__.py
 
-initialize()
-
-    
+# This file marks the tests directory as a Python package

@@ -11,9 +11,6 @@ class DatasetLoader:
         self.raw_dir = Path(RAW_DATA_PATH)
         self.processed_dir = Path(PROCESSED_DATA_PATH)
         
-        # Create directories if they don't exist
-        self.raw_dir.mkdir(parents=True, exist_ok=True)
-        self.processed_dir.mkdir(parents=True, exist_ok=True)
 
     def load_data(self, file_path: str) -> pd.DataFrame:
         """
@@ -39,6 +36,7 @@ class DatasetLoader:
         except Exception as e:
             print(f"Error loading dataset: {e}")
             return None
+
 
     def process_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """

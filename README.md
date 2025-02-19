@@ -75,7 +75,7 @@ kchan139-ml-course-shibainu/
 ```
 
 ### Contributing
-1. Fork the `main` repo on GitHub/GitLab
+1. Fork the main repository on GitHub
 2. Clone your fork:
    ```bash
    git clone https://github.com/your_username/ml-course-shibainu.git
@@ -90,9 +90,9 @@ kchan139-ml-course-shibainu/
 4. Keep your fork updated:
    ```bash
    git fetch upstream
-   git checkout main
-   git merge upstream/main
-   git push origin main
+   git checkout develop
+   git merge upstream/develop
+   git push origin develop
    ```
 
 5. Develop on feature branch:
@@ -106,14 +106,14 @@ kchan139-ml-course-shibainu/
    ```bash
    git checkout feature-name
    git fetch upstream
-   git rebase upstream/main
+   git rebase upstream/develop
    git push -f origin feature-name
    ```
 
 7. Create PR from your feature branch to upstream main
 
 Key points:
-- Never commit directly to `main`
+- Never commit directly to `main` or `develop`
 - Regularly sync with upstream
 - Rebase feature branches before PRs
 - Use **conventional**, **standard** commit messages

@@ -41,27 +41,24 @@ class DatasetLoader:
 
     def process_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Process the dataset using the DataPreprocessor.
-        This involves cleaning, encoding sentiments, and splitting the data.
+        Basic preprocessing of the dataset.
         """
-        # Initialize the DataPreprocessor
-        preprocessor = DataPreprocessor("")  # File path is not necessary for processing the DataFrame directly
-        preprocessor.df = df  # Set the DataFrame to the preprocessor
-        preprocessor.clean_data()  # Clean the data (remove punctuation, lowercase, etc.)
-
-        # Get the processed DataFrame
-        processed_df = preprocessor.get_processed_dataframe()
-
-        # Return the processed DataFrame
-        return processed_df
+        # Handle missing values by dropping rows with any missing values
+        df = df.dropna()
+        
+        # Save processed data
+        processed_path = self.processed_dir / "processed_dataset.csv"
+        df.to_csv(processed_path, index=False)
+        
+        return df
 
 
-    def load_processed_data(self) -> pd.DataFrame:
+    def load_processed_data(self, path:str = "") -> pd.DataFrame:
         """
         Load the processed dataset using the DataPreprocessor.
         """
         # Use DataPreprocessor to load and process the data if it exists
-        preprocessor = DataPreprocessor("")  # File path is not necessary for loading
+        preprocessor = DataPreprocessor(path)  # File path is not necessary for loading
         processed_df = preprocessor.get_processed_dataframe()
         
         # If the processed data doesn't exist yet, return None

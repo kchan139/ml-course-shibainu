@@ -10,10 +10,14 @@ def test_load_data(tmp_path):
     """
     # Setup: Create a sample DataFrame and write it to a temporary CSV file
     data = {
-        'duration (ms)': [2000, 2500, 3000],
-        'danceability': [0.7, 0.8, 0.6],
-        'energy': [0.5, 0.6, 0.4],
-        'labels': ['rock', 'pop', 'jazz']
+        'Sentiment': [
+            'neutral', 'negative', 'positive'
+        ],
+        'News Headline': [
+            "According to Gran , the company has no plans to move all production to Russia , although that is where the company is growing .",
+            "The international electronic industry company Elcoteq has laid off tens of employees from its Tallinn facility ; contrary to earlier layoffs the company contracted the ranks of its office workers , the daily Postimees reported .", 
+            "According to the company 's updated strategy for the years 2009-2012 , Basware targets a long-term net sales growth in the range of 20 % -40 % with an operating profit margin of 10 % -20 % of net sales ."
+        ],
     }
     df = pd.DataFrame(data)
     
@@ -43,14 +47,22 @@ def test_load_data(tmp_path):
 
 def test_process_data():
     """
+    pass
     Tests the data processing method (removing duplicates, handling missing values).
     """
+    pass
     # Setup: Create a sample DataFrame with duplicates and missing values
+    # Setup: Create a sample DataFrame and write it to a temporary CSV file
     data = {
-        'duration (ms)': [2000, 2500, 2500, 3000, None],
-        'danceability': [0.7, 0.8, 0.8, 0.6, 0.5],
-        'energy': [0.5, 0.6, 0.6, 0.4, 0.3],
-        'labels': ['rock', 'pop', 'pop', 'jazz', 'rock']
+        'Sentiment': [
+            'neutral', 'negative', 'positive', 'positive'
+        ],
+        'News Headline': [
+            "According to Gran , the company has no plans to move all production to Russia , although that is where the company is growing .",
+            "The international electronic industry company Elcoteq has laid off tens of employees from its Tallinn facility ; contrary to earlier layoffs the company contracted the ranks of its office workers , the daily Postimees reported .", 
+            "According to the company 's updated strategy for the years 2009-2012 , Basware targets a long-term net sales growth in the range of 20 % -40 % with an operating profit margin of 10 % -20 % of net sales .",
+            None
+        ],
     }
     df = pd.DataFrame(data)
 
@@ -64,10 +76,10 @@ def test_process_data():
     assert processed_df is not None, "Failed to process the dataset"
 
     # Check for removed duplicates (rows with '2500' should be removed)
-    assert len(processed_df) == 4, f"Expected 4 rows, but got {len(processed_df)}"
+    assert len(processed_df) == 3, f"Expected 3 rows, but got {len(processed_df)}"
     
     # Check that missing values are dropped
-    assert processed_df['duration (ms)'].isnull().sum() == 0, "There are still missing values in 'duration (ms)'"
+    assert processed_df['News Headline'].isnull().sum() == 0, "There are still missing values in 'News Headline'"
 
 
 
@@ -75,12 +87,17 @@ def test_load_processed_data():
     """
     Tests whether the processed data can be loaded correctly.
     """
+    pass
     # Setup: Create a sample DataFrame to simulate the processed data
     data = {
-        'duration (ms)': [2000, 2500, 3000],
-        'danceability': [0.7, 0.8, 0.6],
-        'energy': [0.5, 0.6, 0.4],
-        'labels': ['rock', 'pop', 'jazz']
+        'Sentiment': [
+            'neutral', 'negative', 'positive'
+        ],
+        'News Headline': [
+            "According to Gran , the company has no plans to move all production to Russia , although that is where the company is growing .",
+            "The international electronic industry company Elcoteq has laid off tens of employees from its Tallinn facility ; contrary to earlier layoffs the company contracted the ranks of its office workers , the daily Postimees reported .", 
+            "According to the company 's updated strategy for the years 2009-2012 , Basware targets a long-term net sales growth in the range of 20 % -40 % with an operating profit margin of 10 % -20 % of net sales ."
+        ],
     }
     df = pd.DataFrame(data)
     
@@ -88,7 +105,7 @@ def test_load_processed_data():
     loader = DatasetLoader()
 
     # Save the processed data to the processed directory
-    processed_path = loader.processed_dir / "processed_moodify_dataset.csv"
+    processed_path = loader.processed_dir / "test_data.csv"
     df.to_csv(processed_path, index=False)
 
     # Test: Load the processed data

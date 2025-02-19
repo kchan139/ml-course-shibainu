@@ -1,6 +1,8 @@
 # tests/test_data.py
 import pytest
 import pandas as pd
+import os
+from src.config import *
 from src.data.make_dataset import DatasetLoader
 from src.data.preprocess import DataPreprocessor
 
@@ -147,7 +149,12 @@ def create_sample_csv(tmp_path):
     #     ],
     # }
     # df = pd.DataFrame(data)
-    df = pd.read_csv("E:/HCMUT-year 3 project/ml-course-shibainu/dataset/raw/all-data.csv")
+    
+    # Build the path relative to the current file
+    file_path = TEST_DIR
+
+    # Read the CSV
+    df = pd.read_csv(file_path)
 
     loader = DatasetLoader()
     processed_df = loader.process_data(df)

@@ -131,25 +131,6 @@ def create_sample_csv(tmp_path):
     Helper function to create a sample CSV file for testing.
     Returns the file path and the original DataFrame.
     """
-    # data = {
-    #     'Sentiment': [
-    #         'neutral', 'negative', 'positive', 'positive', 'positive', 'neutral', 'negative', 'neutral', 'positive', 'negative'
-    #     ],
-    #     'News Headline': [
-    #         "According to Gran , the company has no plans to move all production to Russia , although that is where the company is growing .",
-    #         "The international electronic industry company Elcoteq has laid off tens of employees from its Tallinn facility ; contrary to earlier layoffs the company contracted the ranks of its office workers , the daily Postimees reported .", 
-    #         "According to the company 's updated strategy for the years 2009-2012 , Basware targets a long-term net sales growth in the range of 20 % -40 % with an operating profit margin of 10 % -20 % of net sales .",
-    #         None,
-    #         "Finnish Talentum reports its operating profit increased to EUR 20.5 mn in 2005 from EUR 9.3 mn in 2004 , and net sales totaled EUR 103.3 mn , up from EUR 96.4 mn .",
-    #         "Technopolis plans to develop in stages an area of no less than 100,000 square meters in order to host companies working in computer technologies and telecommunications , the statement said .",
-    #         "One of the challenges in the oil production in the North Sea is scale formation that can plug pipelines and halt production .",
-    #         "Aldata said that there are still a number of operational aspects to be defined between it and Microsoft and further details of the product and market initiatives resulting from this agreement will be available at a later date .",
-    #         "As the largest elevator market in the world , Chinese output of elevators continued to rise to 262,000 units in 2009 , up about 5 % yr-on-yr .",
-    #         "Jan. 6 -- Ford is struggling in the face of slowing truck and SUV sales and a surfeit of up-to-date , gotta-have cars ."
-    #     ],
-    # }
-    # df = pd.DataFrame(data)
-    
     # Build the path relative to the current file
     file_path = TEST_DIR
 

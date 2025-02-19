@@ -2,6 +2,7 @@
 import pytest
 import pandas as pd
 from src.data.make_dataset import DatasetLoader
+from src.data.preprocess import DataPreprocessor
 
 def test_load_data(tmp_path):
     """
@@ -123,22 +124,104 @@ def test_load_processed_data():
 
 
 
-def test_data_cleaning():
+def create_sample_csv(tmp_path):
     """
-    Verifies the data cleaning process works as expected.
+    Helper function to create a sample CSV file for testing.
+    Returns the file path and the original DataFrame.
     """
-    pass
+    # data = {
+    #     'Sentiment': [
+    #         'neutral', 'negative', 'positive', 'positive', 'positive', 'neutral', 'negative', 'neutral', 'positive', 'negative'
+    #     ],
+    #     'News Headline': [
+    #         "According to Gran , the company has no plans to move all production to Russia , although that is where the company is growing .",
+    #         "The international electronic industry company Elcoteq has laid off tens of employees from its Tallinn facility ; contrary to earlier layoffs the company contracted the ranks of its office workers , the daily Postimees reported .", 
+    #         "According to the company 's updated strategy for the years 2009-2012 , Basware targets a long-term net sales growth in the range of 20 % -40 % with an operating profit margin of 10 % -20 % of net sales .",
+    #         None,
+    #         "Finnish Talentum reports its operating profit increased to EUR 20.5 mn in 2005 from EUR 9.3 mn in 2004 , and net sales totaled EUR 103.3 mn , up from EUR 96.4 mn .",
+    #         "Technopolis plans to develop in stages an area of no less than 100,000 square meters in order to host companies working in computer technologies and telecommunications , the statement said .",
+    #         "One of the challenges in the oil production in the North Sea is scale formation that can plug pipelines and halt production .",
+    #         "Aldata said that there are still a number of operational aspects to be defined between it and Microsoft and further details of the product and market initiatives resulting from this agreement will be available at a later date .",
+    #         "As the largest elevator market in the world , Chinese output of elevators continued to rise to 262,000 units in 2009 , up about 5 % yr-on-yr .",
+    #         "Jan. 6 -- Ford is struggling in the face of slowing truck and SUV sales and a surfeit of up-to-date , gotta-have cars ."
+    #     ],
+    # }
+    # df = pd.DataFrame(data)
+    df = pd.read_csv("E:/HCMUT-year 3 project/ml-course-shibainu/dataset/raw/all-data.csv")
 
+    loader = DatasetLoader()
+    processed_df = loader.process_data(df)
 
-def test_data_split():
-    """
-    Ensures data is correctly split into train, validation, and test sets.
-    """
-    pass
+    file_path = tmp_path / "sample.csv"
+    processed_df.to_csv(file_path, index=False)
+    return file_path, processed_df
 
+def test_data_cleaning(tmp_path):
+    """
+    Verifies that the data cleaning process works as expected:
+      - Creates a 'clean_text' column.
+      - Encodes sentiment labels into 'sentiment_encoded'.
+      - Checks that text is lowercased and punctuation is removed.
+    """
+    file_path, original_df = create_sample_csv(tmp_path)
+    preprocessor = DataPreprocessor(str(file_path))
+    preprocessor.clean_data()
+    processed_df = preprocessor.get_processed_dataframe()
+    
+    # Check if the 'clean_text' column exists
+    assert "clean_text" in processed_df.columns, "Missing 'clean_text' column after cleaning."
+    
+    # Check that the cleaning has been applied (e.g., lowercase, punctuation removed)
+    sample_cleaned = processed_df["clean_text"].iloc[0]
+    expected_cleaned = "according gran company plan move production russia although company growing"
+    assert sample_cleaned == expected_cleaned, f"Expected '{expected_cleaned}' but got '{sample_cleaned}'"
+    
+    # Check if the 'sentiment_encoded' column exists and has three unique values
+    assert "sentiment_encoded" in processed_df.columns, "Missing 'sentiment_encoded' column after cleaning."
+    unique_labels = processed_df["sentiment_encoded"].unique()
+    # Since label encoding is arbitrary, we expect three unique numeric labels.
+    assert len(unique_labels) == 3, "Sentiment labels were not encoded correctly."
 
-def test_vectorization():
+def test_data_split(tmp_path):
     """
-    Validates that the lyrics are correctly transformed into numerical representations.
+    Ensures that the dataset is correctly split into training, validation, and test sets.
+    Checks that the split sizes roughly correspond to the specified test and validation sizes.
     """
-    pass
+    file_path, _ = create_sample_csv(tmp_path)
+    preprocessor = DataPreprocessor(str(file_path))
+    preprocessor.clean_data()
+    total = len(preprocessor.df)
+    preprocessor.split_data(test_size=0.25, val_size=0.2, random_state=42)
+    
+    # Ensure that all data is accounted for in the splits
+    total_split = len(preprocessor.X_train) + len(preprocessor.X_val) + len(preprocessor.X_test)
+    assert total == total_split, "The sum of splits does not equal the total number of samples."
+    
+    # Check test set size (expected about 25% of total)
+    expected_test_size = int(total * 0.25)
+    assert abs(len(preprocessor.X_test) - expected_test_size) <= 1, "Test set size is not as expected."
+
+def test_vectorization(tmp_path):
+    """
+    Validates that the vectorization process produces TF-IDF matrices
+    with the correct dimensions based on the data splits.
+    """
+    file_path, _ = create_sample_csv(tmp_path)
+    preprocessor = DataPreprocessor(str(file_path))
+    preprocessor.clean_data()
+    preprocessor.split_data(test_size=0.3, val_size=0.2, random_state=42)
+    
+    # Vectorize the cleaned text
+    (X_train_vec, X_val_vec, X_test_vec), vectorizer = preprocessor.vectorize_text()
+    
+    # Verify the vectorizer is initialized
+    assert vectorizer is not None, "TF-IDF vectorizer was not initialized."
+    
+    # Get the number of features (should not exceed 5000 as specified)
+    num_features = len(vectorizer.get_feature_names_out())
+    assert num_features <= 5000, "Number of TF-IDF features exceeds the specified limit."
+    
+    # Check that the number of rows in each matrix matches the respective split sizes
+    assert X_train_vec.shape[0] == len(preprocessor.X_train), "Mismatch in training set size after vectorization."
+    assert X_val_vec.shape[0] == len(preprocessor.X_val), "Mismatch in validation set size after vectorization."
+    assert X_test_vec.shape[0] == len(preprocessor.X_test), "Mismatch in test set size after vectorization."

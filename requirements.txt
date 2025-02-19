@@ -1,1 +1,9 @@
-# Add initial dependencies here
+pandas
+numpy 
+scikit-learn
+torch
+transformers
+matplotlib
+seaborn
+pytest
+wordcloud

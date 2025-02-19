@@ -46,7 +46,7 @@ class DatasetLoader:
         df = df.dropna()
         
         # Save processed data
-        processed_path = self.processed_dir / "processed_moodify_dataset.csv"
+        processed_path = self.processed_dir / "processed_dataset.csv"
         df.to_csv(processed_path, index=False)
         
         return df
@@ -56,7 +56,7 @@ class DatasetLoader:
         """
         Loads the processed dataset if it exists.
         """
-        processed_path = self.processed_dir / "processed_moodify_dataset.csv"
+        processed_path = self.processed_dir / "processed_dataset.csv"
         if processed_path.exists():
             return pd.read_csv(processed_path)
         return None

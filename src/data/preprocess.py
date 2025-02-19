@@ -1,24 +1,152 @@
 # src/data/preprocess.py
 
+import re
+import string
+from pathlib import Path
+import pandas as pd
+import nltk
+
+nltk.download('punkt')
+nltk.download('stopwords')
+nltk.download('wordnet')
+
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.preprocessing import LabelEncoder
+from src.config import RAW_DATA_PATH, PROCESSED_DATA_PATH  # Import paths from config.py
+
 class DataPreprocessor:
     """
-    This class performs preprocessing tasks on the dataset, including text cleaning and data splitting.
+    This class preprocesses the 'all-data.csv' dataset by performing text cleaning using NLTK,
+    encoding sentiment labels, splitting the data into training, validation, and test sets,
+    and vectorizing the cleaned text using TF-IDF.
     """
 
-    def clean_lyrics(self):
+    def __init__(self, file_path: str):
         """
-        Cleans the lyrics by removing special characters, converting to lowercase, and performing other cleaning operations.
+        Initializes the DataPreprocessor with the CSV file path.
+        
+        Args:
+            file_path: Path to the 'all-data.csv' file.
         """
-        pass
+        self.file_path = file_path
+        self.df = pd.read_csv(file_path, encoding="UTF-8")
+        # Remove extra spaces from column names for consistency
+        self.df.rename(columns=lambda x: x.strip(), inplace=True)
+        self.label_encoder = LabelEncoder()
+        self.vectorizer = None  # Will be initialized during vectorization
 
-    def split_data(self):
+        # Initialize NLTK tools
+        self.stop_words = set(stopwords.words("english"))
+        self.lemmatizer = WordNetLemmatizer()
+
+        # Placeholders for split data
+        self.X_train = None
+        self.X_val = None
+        self.X_test = None
+        self.y_train = None
+        self.y_val = None
+        self.y_test = None
+
+    def clean_text(self, text: str) -> str:
+        """
+        Cleans the input text by:
+         - Converting to lowercase.
+         - Removing numbers.
+         - Removing punctuation.
+         - Tokenizing using NLTK.
+         - Removing stopwords.
+         - Lemmatizing tokens.
+         
+        Args:
+            text: Raw text from the dataset.
+            
+        Returns:
+            A cleaned version of the text.
+        """
+        text = text.lower()  # Lowercase the text
+        text = re.sub(r'\d+', '', text)  # Remove numbers
+        text = text.translate(str.maketrans("", "", string.punctuation))  # Remove punctuation
+        
+        # Tokenize using NLTK's word_tokenize
+        try:
+            tokens = word_tokenize(text)
+        except LookupError:
+            nltk.download('punkt')
+            nltk.download('punkt_tab')
+            nltk.download('stopwords')
+            tokens = word_tokenize(text)
+        
+        # Remove stopwords and lemmatize each token
+        tokens = [self.lemmatizer.lemmatize(token) for token in tokens if token not in self.stop_words]
+        return " ".join(tokens)
+
+    def clean_data(self):
+        """
+        Cleans the dataset by applying text cleaning to the 'News Headline' column,
+        and encodes the sentiment labels. The cleaned text is stored in a new column 'clean_text',
+        and the encoded sentiment in 'sentiment_encoded'.
+        """
+        self.df["clean_text"] = self.df["News Headline"].astype(str).apply(self.clean_text)
+        self.df["sentiment_encoded"] = self.label_encoder.fit_transform(self.df["Sentiment"])
+
+    def split_data(self, test_size: float = 0.2, val_size: float = 0.1, random_state: int = 42):
         """
         Splits the dataset into training, validation, and test sets.
+        
+        Args:
+            test_size: Fraction of the data to reserve for the test set.
+            val_size: Fraction of the remaining data to reserve for the validation set.
+            random_state: Seed used for reproducibility.
         """
-        pass
+        # Ensure data is cleaned before splitting
+        if "clean_text" not in self.df.columns:
+            self.clean_data()
+
+        X = self.df["clean_text"]
+        y = self.df["sentiment_encoded"]
+
+        # Split into train+val and test sets
+        X_train_val, self.X_test, y_train_val, self.y_test = train_test_split(
+            X, y, test_size=test_size, random_state=random_state, stratify=y
+        )
+
+        # Calculate relative validation size from the remaining data
+        val_relative_size = val_size / (1 - test_size)
+        self.X_train, self.X_val, self.y_train, self.y_val = train_test_split(
+            X_train_val, y_train_val, test_size=val_relative_size, random_state=random_state, stratify=y_train_val
+        )
 
     def vectorize_text(self):
         """
-        Converts lyrics into numerical representation using methods like TF-IDF or word embeddings.
+        Vectorizes the cleaned text using TF-IDF.
+        
+        Returns:
+            A tuple containing:
+              - (X_train_vec, X_val_vec, X_test_vec): TF-IDF matrices for training, validation, and test sets.
+              - The fitted TfidfVectorizer.
+              
+        Raises:
+            ValueError: If the data has not been split yet.
         """
-        pass
+        if self.X_train is None or self.X_val is None or self.X_test is None:
+            raise ValueError("Data has not been split yet. Please call split_data() first.")
+
+        self.vectorizer = TfidfVectorizer(max_features=5000)
+        X_train_vec = self.vectorizer.fit_transform(self.X_train)
+        X_val_vec = self.vectorizer.transform(self.X_val)
+        X_test_vec = self.vectorizer.transform(self.X_test)
+
+        return (X_train_vec, X_val_vec, X_test_vec), self.vectorizer
+
+    def get_processed_dataframe(self) -> pd.DataFrame:
+        """
+        Returns the processed DataFrame containing the cleaned text and encoded sentiment.
+        """
+        if "clean_text" not in self.df.columns or "sentiment_encoded" not in self.df.columns:
+            self.clean_data()
+        return self.df
+

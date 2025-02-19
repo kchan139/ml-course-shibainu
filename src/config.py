@@ -17,3 +17,4 @@ REPORTS_DIR = os.path.join(BASE_DIR, 'reports')
 FIGURES_DIR = os.path.join(REPORTS_DIR, 'figures')
 
 # Other configurations
+TEST_DIR = os.path.join(RAW_DATA_PATH, "all-data.csv")

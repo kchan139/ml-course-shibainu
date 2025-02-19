@@ -1,6 +1,7 @@
 import pandas as pd
 from pathlib import Path
-from src.config import RAW_DATA_PATH, PROCESSED_DATA_PATH  # Import paths from config.py
+from src.config import *
+from src.data.preprocess import DataPreprocessor
 
 class DatasetLoader:
     """
@@ -40,23 +41,31 @@ class DatasetLoader:
 
     def process_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Basic preprocessing of the dataset.
+        Process the dataset using the DataPreprocessor.
+        This involves cleaning, encoding sentiments, and splitting the data.
         """
-        # Handle missing values by dropping rows with any missing values
-        df = df.dropna()
-        
-        # Save processed data
-        processed_path = self.processed_dir / "processed_dataset.csv"
-        df.to_csv(processed_path, index=False)
-        
-        return df
+        # Initialize the DataPreprocessor
+        preprocessor = DataPreprocessor("")  # File path is not necessary for processing the DataFrame directly
+        preprocessor.df = df  # Set the DataFrame to the preprocessor
+        preprocessor.clean_data()  # Clean the data (remove punctuation, lowercase, etc.)
+
+        # Get the processed DataFrame
+        processed_df = preprocessor.get_processed_dataframe()
+
+        # Return the processed DataFrame
+        return processed_df
 
 
     def load_processed_data(self) -> pd.DataFrame:
         """
-        Loads the processed dataset if it exists.
+        Load the processed dataset using the DataPreprocessor.
         """
-        processed_path = self.processed_dir / "processed_dataset.csv"
-        if processed_path.exists():
-            return pd.read_csv(processed_path)
-        return None
+        # Use DataPreprocessor to load and process the data if it exists
+        preprocessor = DataPreprocessor("")  # File path is not necessary for loading
+        processed_df = preprocessor.get_processed_dataframe()
+        
+        # If the processed data doesn't exist yet, return None
+        if processed_df is None:
+            return None
+        
+        return processed_df

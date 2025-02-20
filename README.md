@@ -75,44 +75,48 @@ kchan139-ml-course-shibainu/
 ```
 
 ### Contributing
+1. Fork the main repository on GitHub
+2. Clone your fork:
+   ```bash
+   git clone https://github.com/your_username/ml-course-shibainu.git
+   git remote add upstream https://github.com/kchan139/ml-course-shibainu.git
+   ```
 
-##### I. Ensure Your Fork and Branch are Up-to-Date
+3. Create a feature branch:
+   ```bash
+   git checkout -b feature/feature-name
+   ```
 
-1. Add the original repository as a remote (if not done earlier):
-```bash
-   git remote add upstream https://github.com/kchan139/ml-course-shibainu
-```
-2. Fetch the latest changes:
-```bash
+4. Keep your fork updated:
+   ```bash
    git fetch upstream
-```
-3. Switch to your local `develop` branch and merge the changes:
-```bash
    git checkout develop
    git merge upstream/develop
-```
-4. Push the updated `develop` to your forked repository:
-```bash
    git push origin develop
-```
+   ```
 
-##### II. Create a Model Branch
-1. Create and switch to a new branch (if not done earlier):
-```bash
-   git checkout -b model/your-model
-```
-2. Make changes
-3. Stage and commit your changes:
-```bash
+5. Develop on feature branch:
+   ```bash
    git add .
-   git commit -m "desciption of your changes"
-```
-4. Push the feature branch to your fork:
-```bash
-   git push origin model/your-model
-```
+   git commit -m "description"
+   git push origin feature-name
+   ```
 
-##### III. Create a Pull Request on GitHub
+6. Rebase before PR:
+   ```bash
+   git checkout feature-name
+   git fetch upstream
+   git rebase upstream/develop
+   git push -f origin feature-name
+   ```
+
+7. Create PR from your feature branch to upstream main
+
+Key points:
+- Never commit directly to `main` or `develop`
+- Regularly sync with upstream
+- Rebase feature branches before PRs
+- Use **conventional**, **standard** commit messages
 
 
 ### License

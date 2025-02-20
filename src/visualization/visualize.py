@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from wordcloud import WordCloud, STOPWORDS
 from sklearn.feature_extraction.text import CountVectorizer
+from src.data.preprocess import DataPreprocessor
 
 class Visualizer:
     """
@@ -26,6 +27,7 @@ class Visualizer:
                         xytext=(0, 5), 
                         textcoords='offset points')
         plt.show()
+        
 
     def generate_word_cloud(self, data, sentiment):
         """
@@ -50,6 +52,7 @@ class Visualizer:
         plt.axis('off')
         plt.show()
 
+
     def plot_text_length_distribution(self, data):
         """
         Visualizes text length distribution by sentiment.
@@ -65,23 +68,36 @@ class Visualizer:
         plt.ylabel('Number of Words')
         plt.xlabel('')
         plt.show()
-
+    
+    
     def plot_top_ngrams(self, data, n=2, top_k=10):
         """
-        Plots top n-grams for each sentiment.
+        Plots top n-grams for each sentiment using the full preprocessing pipeline.
         
         Args:
             data (pd.DataFrame): DataFrame containing text data
             n (int): Number of grams (1=unigrams, 2=bigrams, etc.)
             top_k (int): Number of top n-grams to show
         """
-        sentiments = data['Sentiment'].unique()
+        # Initialize preprocessor with the data
+        self.preprocessor = DataPreprocessor("")
+        
+        # Clean the data using the preprocessor
+        self.preprocessor.df = data
+        self.preprocessor.clean_data()
+        processed_df = self.preprocessor.get_processed_dataframe()
+        
+        sentiments = processed_df['Sentiment'].unique()
         
         for sentiment in sentiments:
             plt.figure(figsize=(12, 6))
-            texts = data[data['Sentiment'] == sentiment]['News Headline'].astype(str)
             
-            vectorizer = CountVectorizer(ngram_range=(n, n), stop_words='english')
+            # Use cleaned text from preprocessor
+            sentiment_mask = processed_df['Sentiment'] == sentiment
+            texts = processed_df[sentiment_mask]['clean_text']
+            
+            # Use preprocessor's vectorizer settings
+            vectorizer = CountVectorizer(ngram_range=(n, n))
             matrix = vectorizer.fit_transform(texts)
             
             ngram_counts = matrix.sum(axis=0)
@@ -97,6 +113,7 @@ class Visualizer:
                 x=[count for _, count in sorted_ngrams],
                 y=[ngram for ngram, _ in sorted_ngrams]
             )
+            
             plt.title(f'Top {n}-grams for "{sentiment}" Sentiment')
             plt.xlabel('Frequency')
             plt.ylabel('')

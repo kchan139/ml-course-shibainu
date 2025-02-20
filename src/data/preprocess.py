@@ -135,7 +135,7 @@ class DataPreprocessor:
         if self.X_train is None or self.X_val is None or self.X_test is None:
             raise ValueError("Data has not been split yet. Please call split_data() first.")
 
-        self.vectorizer = TfidfVectorizer(max_features=5000)
+        self.vectorizer = TfidfVectorizer(max_features=20000, ngram_range=(1,2))
         X_train_vec = self.vectorizer.fit_transform(self.X_train)
         X_val_vec = self.vectorizer.transform(self.X_val)
         X_test_vec = self.vectorizer.transform(self.X_test)

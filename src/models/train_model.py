@@ -7,7 +7,7 @@ class ModelTrainer:
 
     def train_decision_tree(self):
         """
-        Trains the Decision Tree model using the processed features.
+        Trains the Decision Tree model using the processed features. HUYNHKIETKHAI
         """
         pass
 

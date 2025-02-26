@@ -1,6 +1,7 @@
 import pandas as pd
 from pathlib import Path
-from src.config import RAW_DATA_PATH, PROCESSED_DATA_PATH  # Import paths from config.py
+from src.config import *
+from src.data.preprocess import DataPreprocessor
 
 class DatasetLoader:
     """
@@ -52,11 +53,16 @@ class DatasetLoader:
         return df
 
 
-    def load_processed_data(self) -> pd.DataFrame:
+    def load_processed_data(self, path:str = "") -> pd.DataFrame:
         """
-        Loads the processed dataset if it exists.
+        Load the processed dataset using the DataPreprocessor.
         """
-        processed_path = self.processed_dir / "processed_dataset.csv"
-        if processed_path.exists():
-            return pd.read_csv(processed_path)
-        return None
+        # Use DataPreprocessor to load and process the data if it exists
+        preprocessor = DataPreprocessor(path)  # File path is not necessary for loading
+        processed_df = preprocessor.get_processed_dataframe()
+        
+        # If the processed data doesn't exist yet, return None
+        if processed_df is None:
+            return None
+        
+        return processed_df

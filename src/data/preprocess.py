@@ -45,10 +45,10 @@ class DataPreprocessor:
 
         # Placeholders for split data
         self.X_train = None
-        self.X_val = None
+        # self.X_val = None
         self.X_test = None
         self.y_train = None
-        self.y_val = None
+        # self.y_val = None
         self.y_test = None
 
     def clean_text(self, text: str) -> str:
@@ -93,7 +93,7 @@ class DataPreprocessor:
         self.df["clean_text"] = self.df["News Headline"].astype(str).apply(self.clean_text)
         self.df["sentiment_encoded"] = self.label_encoder.fit_transform(self.df["Sentiment"])
 
-    def split_data(self, test_size: float = 0.2, val_size: float = 0.1, random_state: int = 42):
+    def split_data(self, test_size: float = 0.2, random_state: int = 42):
         """
         Splits the dataset into training, validation, and test sets.
         
@@ -110,15 +110,10 @@ class DataPreprocessor:
         y = self.df["sentiment_encoded"]
 
         # Split into train+val and test sets
-        X_train_val, self.X_test, y_train_val, self.y_test = train_test_split(
+        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
             X, y, test_size=test_size, random_state=random_state, stratify=y
         )
 
-        # Calculate relative validation size from the remaining data
-        val_relative_size = val_size / (1 - test_size)
-        self.X_train, self.X_val, self.y_train, self.y_val = train_test_split(
-            X_train_val, y_train_val, test_size=val_relative_size, random_state=random_state, stratify=y_train_val
-        )
 
     def vectorize_text(self):
         """
@@ -132,15 +127,14 @@ class DataPreprocessor:
         Raises:
             ValueError: If the data has not been split yet.
         """
-        if self.X_train is None or self.X_val is None or self.X_test is None:
+        if self.X_train is None or self.X_test is None:
             raise ValueError("Data has not been split yet. Please call split_data() first.")
 
-        self.vectorizer = TfidfVectorizer(max_features=20000, ngram_range=(1,2))
+        self.vectorizer = TfidfVectorizer(max_features=20000, ngram_range=(1,3))
         X_train_vec = self.vectorizer.fit_transform(self.X_train)
-        X_val_vec = self.vectorizer.transform(self.X_val)
         X_test_vec = self.vectorizer.transform(self.X_test)
 
-        return (X_train_vec, X_val_vec, X_test_vec), self.vectorizer
+        return (X_train_vec, X_test_vec), self.vectorizer
 
     def get_processed_dataframe(self) -> pd.DataFrame:
         """

@@ -2,7 +2,7 @@
 import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import KBinsDiscretizer
-from pgmpy.models import BayesianModel
+from pgmpy.models import BayesianNetwork
 from pgmpy.estimators import HillClimbSearch, BicScore, BayesianEstimator
 
 class ModelTrainer:
@@ -38,35 +38,35 @@ class ModelTrainer:
             A trained BayesianModel instance.
         """
         # Convert sparse matrix to dense array if applicable.
-        if hasattr(vectorized_data, "toarray"):
-            X_dense = vectorized_data.toarray()
-        else:
-            X_dense = vectorized_data
+        # if hasattr(vectorized_data, "toarray"):
+        X_dense = vectorized_data.toarray()
+        # else:
+        #     X_dense = vectorized_data
 
-        # Step 1: Reduce dimensionality using PCA (e.g., to 50 components)
-        pca = PCA(n_components=50)
-        X_reduced = pca.fit_transform(X_dense)
+        # Reduce dimensionality using PCA 
+        self.pca = PCA(n_components=90)
+        X_reduced = self.pca.fit_transform(X_dense)
 
-        # Step 2: Discretize the PCA-reduced features into categorical bins
-        discretizer = KBinsDiscretizer(n_bins=5, encode='ordinal', strategy='uniform')
-        X_discrete = discretizer.fit_transform(X_reduced)
+        # Discretize the PCA-reduced features into categorical bins
+        self.discretizer = KBinsDiscretizer(n_bins=15, encode='ordinal', strategy='quantile')
+        X_discrete = self.discretizer.fit_transform(X_reduced)
 
-        # Step 3: Create a DataFrame with the discretized features
+        # Create a DataFrame with the discretized features
         df_features = pd.DataFrame(X_discrete, columns=[f"feat_{i}" for i in range(X_discrete.shape[1])])
         # Append the label column (assumed to be numeric)
         df_features["label"] = label
 
-        # Step 4: Learn the Bayesian Network structure using Hill-Climb Search with the BIC score
-        hc = HillClimbSearch(df_features, scoring_method=BicScore(df_features))
-        best_structure = hc.estimate()
+        # Learn the Bayesian Network structure using Hill-Climb Search with the BIC score
+        hc = HillClimbSearch(df_features)
+        best_structure = hc.estimate(scoring_method=BicScore(df_features))
 
         # Create the BayesianModel using the learned structure (edges)
-        model = BayesianModel(best_structure.edges())
+        self.trained_model = BayesianNetwork(best_structure.edges())
 
         # Step 5: Fit the model parameters using a Bayesian estimator with a BDeu prior
-        model.fit(df_features, estimator=BayesianEstimator, prior_type='BDeu')
+        self.trained_model.fit(df_features, estimator=BayesianEstimator, prior_type='BDeu')
 
-        return model
+        return self.trained_model
 
     def train_hidden_markov_model(self):
         """

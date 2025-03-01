@@ -2,6 +2,10 @@
 import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import KBinsDiscretizer
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import accuracy_score, classification_report
 from pgmpy.models import BayesianNetwork
 from pgmpy.estimators import HillClimbSearch, BicScore, BayesianEstimator
 
@@ -10,13 +14,29 @@ class ModelTrainer:
     This class is responsible for training different models using the processed features.
     """
 
-    def train_decision_tree(self):
+    def train_decision_tree(self, vectorized_data, labels):
         """
-        Trains the Decision Tree model using the processed features. iaeiia
-        """
-        pass
+        Trains the Decision Tree model.
 
-    def train_neural_network(self):
+        Args:
+            vectorized_data: Sparse matrix or array output from a vectorizer.
+            labels: Array-like structure with the numeric label for each sample.
+        """
+        # Split the dataset into training and testing sets
+        X_train, X_test, y_train, y_test = train_test_split(vectorized_data, labels, test_size=0.2, random_state=42)
+        
+        # Initialize and train the Decision Tree classifier
+        self.decision_tree_model = DecisionTreeClassifier(criterion="entropy", random_state=42)
+        self.decision_tree_model.fit(X_train, y_train)
+        
+        # Evaluate the model
+        y_pred = self.decision_tree_model.predict(X_test)
+        print(f"Decision Tree Accuracy: {accuracy_score(y_test, y_pred):.2f}")
+        print(classification_report(y_test, y_pred))
+
+        return self.decision_tree_model
+
+    def train_neural_network(self): 
         """
         Trains the Neural Network (CNN-BiLSTM) model.
         """

@@ -13,11 +13,39 @@ class ModelPredictor:
         """
         pass
 
-    def predict_neural_network(self):
+    def predict_neural_network(self, test_vectorized_data, model_trainer):
         """
         Makes predictions using the trained Neural Network model.
+        
+        Args:
+            test_vectorized_data: Vectorized test features (sparse matrix from TF-IDF)
+            model_trainer: An instance of ModelTrainer with a trained neural network
+            
+        Returns:
+            Predictions as both probability distributions and class labels
         """
-        pass
+        import numpy as np
+        
+        # Check if model exists
+        if not hasattr(model_trainer, 'nn_model'):
+            raise ValueError("No trained neural network found in the model_trainer")
+        
+        # Convert sparse matrix to dense array if needed
+        if hasattr(test_vectorized_data, "toarray"):
+            X_test_dense = test_vectorized_data.toarray()
+        else:
+            X_test_dense = test_vectorized_data
+        
+        # Make predictions
+        pred_probabilities = model_trainer.nn_model.predict(X_test_dense)
+        pred_classes = np.argmax(pred_probabilities, axis=1)
+        
+        # If a label encoder was used during training, map predictions back to original labels
+        if hasattr(model_trainer, 'label_encoder'):
+            pred_labels = model_trainer.label_encoder.inverse_transform(pred_classes)
+            return pred_probabilities, pred_labels
+        else:
+            return pred_probabilities, pred_classes
 
     def predict_naive_bayes(self):
         """

@@ -13,10 +13,11 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
-from tensorflow.keras.layers import Embedding
+from tensorflow.keras.layers import Embedding, LSTM, Bidirectional, Dropout, Conv1D, MaxPooling1D, Attention
+from tensorflow.keras.regularizers import l2
 from tensorflow.keras.utils import to_categorical
 from sklearn.preprocessing import LabelEncoder
-import matplotlib.pyplot as plt
+from ..features.build_features import FeatureExtractor
 
 class ModelTrainer:
     """
@@ -45,26 +46,38 @@ class ModelTrainer:
 
         return self.decision_tree_model
 
-    def train_neural_network(self, X_train_vec, y_train, X_test_vec=None, y_test=None, epochs=10, batch_size=32):
+    def train_neural_network(self, X_train_texts, y_train, X_test_texts=None, y_test=None, epochs=10, batch_size=32):
         """
-        Trains a neural network model for sentiment classification.
-
+        Trains a neural network model using GloVe embeddings for text classification.
+        
         Args:
-            X_train_vec: Vectorized training features (sparse matrix from TF-IDF)
+            X_train_texts: List of training text samples
             y_train: Training labels
-            X_test_vec: Optional vectorized test features
+            X_test_texts: Optional list of test text samples
             y_test: Optional test labels
             epochs: Number of training epochs
             batch_size: Batch size for training
-
-        Returns:
-            Trained neural network model
         """
-
-        # Convert sparse matrix to dense numpy array if needed
-        X_train_dense = X_train_vec.toarray() if hasattr(X_train_vec, "toarray") else X_train_vec
-        X_test_dense = X_test_vec.toarray() if X_test_vec is not None and hasattr(X_test_vec, "toarray") else X_test_vec
-
+        # Initialize feature extractor
+        feature_extractor = FeatureExtractor()
+        
+        # Build vocabulary
+        _, vocab_size = feature_extractor.fit_vocabulary(X_train_texts)
+        
+        # Convert texts to sequences and pad
+        X_train_seq = feature_extractor.texts_to_sequences(X_train_texts)
+        X_train_padded = feature_extractor.pad_sequences(X_train_seq)
+        
+        if X_test_texts is not None:
+            X_test_seq = feature_extractor.texts_to_sequences(X_test_texts)
+            X_test_padded = feature_extractor.pad_sequences(X_test_seq)
+        else:
+            X_test_padded = None
+        
+        # Load GloVe embeddings
+        embedding_matrix = feature_extractor.load_glove_embeddings()
+        max_length = feature_extractor.max_length
+        
         # Encode labels if they're not already encoded
         if not isinstance(y_train[0], (int, np.integer)):
             self.label_encoder = LabelEncoder()
@@ -76,15 +89,19 @@ class ModelTrainer:
         num_classes = len(np.unique(y_train))
         y_train_cat = to_categorical(y_train, num_classes)
         y_test_cat = to_categorical(y_test, num_classes) if y_test is not None else None
-
-        # Define the model architecture
-        embedding_matrix = load_glove_embeddings()
+        
+        # Define model with embedding layer
         self.nn_model = Sequential([
-            Embedding(input_dim=vocab_size, output_dim=300, weights=[embedding_matrix], input_length=max_length, trainable=False),
-            LSTM(128),
+            Embedding(input_dim=vocab_size, 
+                    output_dim=feature_extractor.embedding_dim, 
+                    weights=[embedding_matrix],
+                    input_length=max_length,
+                    trainable=False),
+            LSTM(128, kernel_regularizer=l2(0.01)),
             Dropout(0.3),
-            Dense(num_classes, activation='softmax')
+            Dense(num_classes, activation='softmax', kernel_regularizer=l2(0.01))
         ])
+
 
         # Compile the model
         self.nn_model.compile(
@@ -101,46 +118,26 @@ class ModelTrainer:
         )
 
         # Train the model
-        if X_test_dense is not None and y_test is not None:
+        if X_test_padded is not None and y_test is not None:
             history = self.nn_model.fit(
-                X_train_dense, y_train_cat,
+                X_train_padded, y_train_cat,
                 epochs=epochs,
                 batch_size=batch_size,
-                validation_data=(X_test_dense, y_test_cat),
+                validation_data=(X_test_padded, y_test_cat),
                 callbacks=[early_stopping]
             )
         else:
             history = self.nn_model.fit(
-                X_train_dense, y_train_cat,
+                X_train_padded, y_train_cat,
                 epochs=epochs,
                 batch_size=batch_size,
                 validation_split=0.2,  # Use 20% of the training data for validation
                 callbacks=[early_stopping]
             )
 
-        # Plot the training history
-        plt.figure(figsize=(12, 4))
-
-        # Plot accuracy
-        plt.subplot(1, 2, 1)
-        plt.plot(history.history['accuracy'], label='Training Accuracy')
-        plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
-        plt.title('Model Accuracy')
-        plt.xlabel('Epoch')
-        plt.ylabel('Accuracy')
-        plt.legend()
-
-        # Plot loss
-        plt.subplot(1, 2, 2)
-        plt.plot(history.history['loss'], label='Training Loss')
-        plt.plot(history.history['val_loss'], label='Validation Loss')
-        plt.title('Model Loss')
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        plt.legend()
-
-        plt.tight_layout()
-        plt.show()
+        # Store history for external analysis
+        self.training_history = history.history  # Save metrics dictionary
+        self.training_epochs = range(1, len(history.history['accuracy']) + 1)
 
         return self.nn_model
 

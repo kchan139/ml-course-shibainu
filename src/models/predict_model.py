@@ -53,45 +53,40 @@ class ModelPredictor:
         """
         pass
     @staticmethod
-    def predict_bayesian_network(test_vectorized_data, model_trainer):
+    def predict_bayesian_network(test_text_data, model_trainer):
         """
-        Makes predictions using the trained Bayesian Network model stored in the provided ModelTrainer instance.
-        
         Args:
-            test_vectorized_data: Sparse matrix or array of test data from a vectorizer.
+            test_text_data: Iterable (list, Series) of cleaned text strings.
             model_trainer: An instance of ModelTrainer that has the following attributes:
-                - trained_model: The trained BayesianModel.
-                - pca: The fitted PCA object used during training.
-                - discretizer: The fitted KBinsDiscretizer used during training.
+                - trained_model: The trained BayesianNetwork.
+                - cv: The fitted CountVectorizer.
+                - selector: The fitted SelectKBest object.
+                - selected_features: List of selected feature names.
                 
         Returns:
             A list of predicted labels.
         """
-        # Convert test_vectorized_data to a dense array if needed.
-        # if hasattr(test_vectorized_data, "toarray"):
-        X_dense_test = test_vectorized_data.toarray()
-        # else:
-        #     X_dense_test = test_vectorized_data
+        # Transform the test text using the fitted CountVectorizer
+        X_counts_test = model_trainer.cv.transform(test_text_data)
 
-        # Transform the test data using the PCA object from the model_trainer.
-        X_reduced_test = model_trainer.pca.transform(X_dense_test)
+        # Apply the same feature selection as during training
+        X_selected_test = model_trainer.selector.transform(X_counts_test)
+        X_features_test = (X_selected_test > 0).astype(int)
 
-        # Discretize the PCA-transformed test data using the discretizer from the model_trainer.
-        X_discrete_test = model_trainer.discretizer.transform(X_reduced_test)
-
-        # Create a DataFrame from the discretized test features.
-        df_test = pd.DataFrame(X_discrete_test, columns=[f"feat_{i}" for i in range(X_discrete_test.shape[1])])
-
-        # Initialize the inference engine with the trained Bayesian network model.
+        # Create a DataFrame with the selected feature names
+        df_test = pd.DataFrame(X_features_test.toarray(), columns=model_trainer.selected_features)
+        
+        # Initialize the inference engine using the trained Bayesian network model.
         infer = VariableElimination(model_trainer.trained_model)
-
         predictions = []
         for _, row in df_test.iterrows():
-            # Build the evidence dictionary for the current sample.
+            # Build the evidence dictionary from the row (convert values to int)
             evidence = {col: int(row[col]) for col in df_test.columns}
-            # Query the model for the 'label' variable.
+
+            # Query the network for the 'label' variable.
             query_result = infer.query(variables=["label"], evidence=evidence)
-            # Determine the predicted label by taking the argmax of the probability distribution.
+            
+            # Pick the label with the highest probability.
             predicted_label = query_result.values.argmax()
             predictions.append(predicted_label)
             

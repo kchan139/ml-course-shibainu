@@ -13,11 +13,10 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
-from tensorflow.keras.layers import Embedding
+from tensorflow.keras.layers import Embedding, LSTM, Bidirectional, Dropout, Conv1D, MaxPooling1D, Attention
+from tensorflow.keras.regularizers import l2
 from tensorflow.keras.utils import to_categorical
 from sklearn.preprocessing import LabelEncoder
-import matplotlib.pyplot as plt
-from tensorflow.keras.layers import LSTM
 from ..features.build_features import FeatureExtractor
 
 class ModelTrainer:
@@ -94,14 +93,15 @@ class ModelTrainer:
         # Define model with embedding layer
         self.nn_model = Sequential([
             Embedding(input_dim=vocab_size, 
-                    output_dim=feature_extractor.embedding_dim,
+                    output_dim=feature_extractor.embedding_dim, 
                     weights=[embedding_matrix],
                     input_length=max_length,
                     trainable=False),
-            LSTM(128),
+            LSTM(128, kernel_regularizer=l2(0.01)),
             Dropout(0.3),
-            Dense(num_classes, activation='softmax')
+            Dense(num_classes, activation='softmax', kernel_regularizer=l2(0.01))
         ])
+
 
         # Compile the model
         self.nn_model.compile(

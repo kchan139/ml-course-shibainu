@@ -114,6 +114,8 @@ class DataPreprocessor:
             X, y, test_size=test_size, random_state=random_state, stratify=y
         )
 
+        return self.X_train, self.X_test, self.y_train, self.y_test
+
 
     def vectorize_text(self):
         """

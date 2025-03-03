@@ -1,5 +1,9 @@
 # src/models/train_model.py
+import os
+import numpy as np
 import pandas as pd
+import torch
+import pickle
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_selection import chi2, SelectKBest
@@ -8,27 +12,11 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, classification_report
 from pgmpy.models import BayesianNetwork  # or BayesianModel (deprecated, use BayesianNetwork)
 from pgmpy.estimators import HillClimbSearch, BicScore, BayesianEstimator
-from hmmlearn import hmm
-import pickle
-import numpy as np
-import datetime
-from tensorflow.keras.models import Model, layers
-from tensorflow.keras.layers import Dense, Dropout
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, TensorBoard
-from tensorflow.keras.regularizers import l2
-from tensorflow.keras.utils import to_categorical
-from sklearn.preprocessing import LabelEncoder
-from ..features.build_features import FeatureExtractor
-from tensorflow.keras.layers import (
-    Embedding, LSTM, Dense, Dropout, Bidirectional,
-    GlobalMaxPooling1D, Conv1D, SpatialDropout1D, BatchNormalization,
-    Attention, Concatenate, Input
-)
 from transformers import BertTokenizer, BertForSequenceClassification, Trainer, TrainingArguments
-import torch
 from sklearn.model_selection import train_test_split
+from hmmlearn import hmm
 from datasets import Dataset
+from src.config import *
 
 def _compute_class_weights(self, y):
     """
@@ -51,7 +39,6 @@ def _compute_class_weights(self, y):
     }
     
     return weights
-from src.config import *
 
 class ModelTrainer:
     """
@@ -207,11 +194,6 @@ class ModelTrainer:
         Returns:
             A trained HMM instance
         """
-        import os
-        import numpy as np
-        from hmmlearn import hmm
-        import pickle
-        from src.config import MODEL_DIR
         
         # Convert sparse matrix to dense format if needed
         if hasattr(X_train, "toarray"):

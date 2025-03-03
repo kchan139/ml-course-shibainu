@@ -1,9 +1,9 @@
 # src/models/predict_model.py
-import pandas as pd
-from pgmpy.inference import VariableElimination
-import numpy as np
 import os
 import pickle
+import numpy as np
+import pandas as pd
+from pgmpy.inference import VariableElimination
 from src.config import *
 
 class ModelPredictor:
@@ -17,39 +17,28 @@ class ModelPredictor:
         """
         pass
 
-    def predict_neural_network(self, test_vectorized_data, model_trainer):
+    def predict_neural_network(self, test_texts):
         """
-        Makes predictions using the trained Neural Network model.
-        
+        Makes predictions using the trained BERT model.
+
         Args:
-            test_vectorized_data: Vectorized test features (sparse matrix from TF-IDF)
-            model_trainer: An instance of ModelTrainer with a trained neural network
+            test_texts (list): List of test text samples.
             
         Returns:
-            Predictions as both probability distributions and class labels
+            Predictions: List of predicted sentiment labels.
         """
-        import numpy as np
-        
-        # Check if model exists
-        if not hasattr(model_trainer, 'nn_model'):
-            raise ValueError("No trained neural network found in the model_trainer")
-        
-        # Convert sparse matrix to dense array if needed
-        if hasattr(test_vectorized_data, "toarray"):
-            X_test_dense = test_vectorized_data.toarray()
-        else:
-            X_test_dense = test_vectorized_data
-        
-        # Make predictions
-        pred_probabilities = model_trainer.nn_model.predict(X_test_dense)
-        pred_classes = np.argmax(pred_probabilities, axis=1)
-        
-        # If a label encoder was used during training, map predictions back to original labels
-        if hasattr(model_trainer, 'label_encoder'):
-            pred_labels = model_trainer.label_encoder.inverse_transform(pred_classes)
-            return pred_probabilities, pred_labels
-        else:
-            return pred_probabilities, pred_classes
+        # Tokenize the test data
+        test_encodings = self.tokenizer(test_texts, truncation=True, padding=True, max_length=256, return_tensors="pt")
+
+        # Get model predictions
+        with torch.no_grad():
+            outputs = self.model(**test_encodings)
+            logits = outputs.logits
+
+        # Get predicted classes
+        predictions = torch.argmax(logits, dim=-1).tolist()
+
+        return predictions
 
     def predict_naive_bayes(self):
         """

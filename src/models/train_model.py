@@ -1,13 +1,15 @@
 # src/models/train_model.py
 import pandas as pd
+from sklearn.preprocessing import StandardScaler
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_selection import chi2, SelectKBest
-from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, classification_report
 from pgmpy.models import BayesianNetwork  # or BayesianModel (deprecated, use BayesianNetwork)
 from pgmpy.estimators import HillClimbSearch, BicScore, BayesianEstimator
+from hmmlearn import hmm
+import pickle
 import numpy as np
 import datetime
 from tensorflow.keras.models import Model, layers
@@ -49,6 +51,7 @@ def _compute_class_weights(self, y):
     }
     
     return weights
+from src.config import *
 
 class ModelTrainer:
     """
@@ -191,8 +194,73 @@ class ModelTrainer:
         
         return self.trained_model
 
-    def train_hidden_markov_model(self):
+    def train_hidden_markov_model(self, X_train, y_train, n_components=2, random_state=42):
         """
-        Trains the Hidden Markov Model for emotion prediction in songs.
+        Trains a Hidden Markov Model (HMM) using the preprocessed data for sentiment analysis.
+        
+        Args:
+            X_train: Vectorized training features (sparse matrix from TF-IDF)
+            y_train: Training labels (sentiment)
+            n_components: Number of hidden states in the HMM (default=2)
+            random_state: Random seed for reproducibility
+            
+        Returns:
+            A trained HMM instance
         """
-        pass
+        import os
+        import numpy as np
+        from hmmlearn import hmm
+        import pickle
+        from src.config import MODEL_DIR
+        
+        # Convert sparse matrix to dense format if needed
+        if hasattr(X_train, "toarray"):
+            X_train_dense = X_train.toarray()
+        else:
+            X_train_dense = X_train
+        
+        # Apply StandardScaler to normalize features
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train_dense)
+
+        # Determine the number of distinct sentiments/classes
+        n_labels = len(np.unique(y_train))
+        
+        # Create and train separate HMM for each sentiment class
+        hmm_models = {}
+        
+        for sentiment in range(n_labels):
+            # Filter data for current sentiment
+            X_sentiment = X_train_scaled[y_train == sentiment]
+            
+            if len(X_sentiment) < n_components:
+                print(f"Warning: Not enough samples ({len(X_sentiment)}) for sentiment {sentiment} with {n_components} components")
+                continue
+                
+            # Train HMM for this sentiment
+            sentiment_model = hmm.GaussianHMM(
+                n_components=n_components,
+                covariance_type="full",
+                n_iter=200,  # Increased iterations
+                random_state=random_state
+            )
+            
+            # Fit the model
+            try:
+                sentiment_model.fit(X_sentiment)
+                hmm_models[sentiment] = sentiment_model
+                print(f"Successfully trained HMM for sentiment {sentiment} with {len(X_sentiment)} samples")
+            except Exception as e:
+                print(f"Error training HMM for sentiment {sentiment}: {e}")
+        
+        # Save the models
+        file_path = os.path.join(MODEL_DIR, "hmm_models.pkl")
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)  # Ensure directory exists
+        with open(file_path, "wb") as f:
+            pickle.dump(hmm_models, f)
+        print(f"HMM models saved at: {file_path}")
+        
+        # Store the models in the instance for later use
+        self.hmm_models = hmm_models
+        
+        return hmm_models

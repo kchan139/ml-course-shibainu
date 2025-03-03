@@ -1,9 +1,5 @@
 # src/models/train_model.py
-import os
-import numpy as np
 import pandas as pd
-import torch
-import pickle
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_selection import chi2, SelectKBest
@@ -12,53 +8,29 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, classification_report
 from pgmpy.models import BayesianNetwork  # or BayesianModel (deprecated, use BayesianNetwork)
 from pgmpy.estimators import HillClimbSearch, BicScore, BayesianEstimator
+from hmmlearn import hmm
+from datetime import datetime
+import pickle
 import numpy as np
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
-from tensorflow.keras.layers import Embedding
+from tensorflow.keras.layers import Embedding, Bidirectional, LSTM, Conv1D, MaxPooling1D
+from tensorflow.keras.layers import Dense, Dropout, GlobalMaxPooling1D
+from tensorflow.keras.regularizers import l2
 from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 from sklearn.preprocessing import LabelEncoder
-from src.config import MODEL_DIR
-import matplotlib.pyplot as plt
-import os
-import pickle
-from transformers import BertTokenizer, BertForSequenceClassification, Trainer, TrainingArguments
-from sklearn.model_selection import train_test_split
-from hmmlearn import hmm
-from datasets import Dataset
+from ..features.build_features import FeatureExtractor
+from src.data.preprocess import DataPreprocessor
 from src.config import *
-
-def _compute_class_weights(self, y):
-    """
-    Compute class weights to handle potential class imbalance.
-    
-    Args:
-        y: Training labels (encoded)
-    
-    Returns:
-        Dictionary of class weights
-    """
-    unique_classes = np.unique(y)
-    class_counts = np.bincount(y)
-    total_samples = len(y)
-    
-    # Compute weights inversely proportional to class frequencies
-    weights = {
-        cls: total_samples / (len(unique_classes) * count) 
-        for cls, count in zip(unique_classes, class_counts)
-    }
-    
-    return weights
 
 class ModelTrainer:
     """
     This class is responsible for training different models using the processed features.
     """
-    def __init__(self):
-        self.model = None
-        self.tokenizer = None
 
     def train_decision_tree(self, vectorized_data, labels):
         """
@@ -82,72 +54,134 @@ class ModelTrainer:
 
         return self.decision_tree_model
 
-    def train_neural_network(self, X_train, y_train, X_test=None, y_test=None, epochs=3, batch_size=8):
+    def train_neural_network(self, preprocessor=None, file_path=None, max_words=10000, 
+                             embedding_dim=100, max_len=100, epochs=10, batch_size=64):
         """
-        Trains a neural network using BERT for text classification.
+        Trains a neural network (CNN-BiLSTM) model for sentiment classification.
         
         Args:
-            X_train (list): List of training text samples.
-            y_train (list): List of training labels.
-            X_test (list): Optional list of test text samples.
-            y_test (list): Optional test labels.
-            epochs (int): Number of epochs.
-            batch_size (int): Batch size for training.
+            preprocessor: Optional DataPreprocessor object with preprocessed data
+            file_path: Path to the processed data file if preprocessor is None
+            max_words: Maximum number of words for tokenization
+            embedding_dim: Dimension for the embedding layer
+            max_len: Maximum length of sequences
+            epochs: Number of training epochs
+            batch_size: Training batch size
+            
+        Returns:
+            Trained neural network model
+            
+        Saves:
+            The trained model and tokenizer in pickle format
         """
-        # Initialize BERT tokenizer
-        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        print("Starting neural network training...")
         
-        # Tokenize the training data
-        train_encodings = self.tokenizer(X_train, truncation=True, padding=True, max_length=256)
+        # Prepare data
+        if preprocessor is None and file_path is not None:
+            # Create and initialize the preprocessor
+            preprocessor = DataPreprocessor(file_path)
+            preprocessor.clean_data()
+            preprocessor.split_data()
         
-        if X_test is not None:
-            test_encodings = self.tokenizer(X_test, truncation=True, padding=True, max_length=256)
-        else:
-            test_encodings = None
-
-        # Convert the training and test data to datasets
-        train_dataset = Dataset.from_dict({
-            'input_ids': train_encodings['input_ids'],
-            'attention_mask': train_encodings['attention_mask'],
-            'labels': y_train
-        })
+        if preprocessor is None:
+            # Use default processed data path if no preprocessor or file provided
+            default_path = os.path.join(PROCESSED_DATA_PATH, "processed_dataset.csv")
+            preprocessor = DataPreprocessor(default_path)
+            preprocessor.clean_data()
+            preprocessor.split_data()
         
-        if X_test is not None:
-            test_dataset = Dataset.from_dict({
-                'input_ids': test_encodings['input_ids'],
-                'attention_mask': test_encodings['attention_mask'],
-                'labels': y_test
-            })
-        else:
-            test_dataset = None
-
-        # Load pre-trained BERT model for sequence classification
-        self.model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=len(set(y_train)))
-
-        # Define training arguments
-        training_args = TrainingArguments(
-            output_dir='./results',          # output directory
-            num_train_epochs=epochs,         # number of training epochs
-            per_device_train_batch_size=batch_size,  # batch size for training
-            per_device_eval_batch_size=batch_size,   # batch size for evaluation
-            warmup_steps=500,                # number of warmup steps for learning rate scheduler
-            weight_decay=0.01,               # strength of weight decay
-            logging_dir='./logs',            # directory for storing logs
-            evaluation_strategy="epoch"      # evaluation strategy
+        # Access the training and test data
+        X_train = preprocessor.X_train
+        X_test = preprocessor.X_test
+        y_train = preprocessor.y_train
+        y_test = preprocessor.y_test
+        
+        # Convert to categorical format for neural network
+        num_classes = len(np.unique(y_train))
+        y_train_cat = to_categorical(y_train, num_classes)
+        y_test_cat = to_categorical(y_test, num_classes)
+        
+        # Tokenize text data
+        tokenizer = Tokenizer(num_words=max_words)
+        tokenizer.fit_on_texts(X_train)
+        
+        X_train_seq = tokenizer.texts_to_sequences(X_train)
+        X_test_seq = tokenizer.texts_to_sequences(X_test)
+        
+        # Pad sequences to ensure uniform length
+        X_train_pad = pad_sequences(X_train_seq, maxlen=max_len)
+        X_test_pad = pad_sequences(X_test_seq, maxlen=max_len)
+        
+        # Define the CNN-BiLSTM model architecture
+        model = Sequential()
+        
+        # Embedding layer
+        model.add(Embedding(max_words, embedding_dim, input_length=max_len))
+        
+        # CNN layers
+        model.add(Conv1D(128, 5, activation='relu'))
+        model.add(MaxPooling1D(5))
+        model.add(Conv1D(64, 5, activation='relu'))
+        
+        # BiLSTM layer
+        model.add(Bidirectional(LSTM(64, return_sequences=True)))
+        model.add(Dropout(0.3))
+        
+        # Global pooling and dense layers
+        model.add(GlobalMaxPooling1D())
+        model.add(Dense(64, activation='relu'))
+        model.add(Dropout(0.5))
+        model.add(Dense(num_classes, activation='softmax'))
+        
+        # Compile the model
+        model.compile(
+            loss='categorical_crossentropy',
+            optimizer='adam',
+            metrics=['accuracy']
         )
-
-        # Initialize Trainer
-        trainer = Trainer(
-            model=self.model,                     # the model to train
-            args=training_args,                  # training arguments, defined above
-            train_dataset=train_dataset,         # training dataset
-            eval_dataset=test_dataset            # evaluation dataset
+        
+        # Early stopping to prevent overfitting
+        early_stopping = EarlyStopping(
+            monitor='val_loss',
+            patience=3,
+            restore_best_weights=True
         )
-
+        
         # Train the model
-        trainer.train()
-
-        return self.model
+        history = model.fit(
+            X_train_pad, y_train_cat,
+            epochs=epochs,
+            batch_size=batch_size,
+            validation_data=(X_test_pad, y_test_cat),
+            callbacks=[early_stopping]
+        )
+        
+        # Evaluate the model
+        y_pred_prob = model.predict(X_test_pad)
+        y_pred = np.argmax(y_pred_prob, axis=1)
+        accuracy = accuracy_score(y_test, y_pred)
+        print(f"Test Accuracy: {accuracy:.4f}")
+        print(classification_report(y_test, y_pred))
+        
+        # Save the model and tokenizer
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        model_filename = f"neural_network_{timestamp}.pkl"
+        model_path = EXPERIMENT_DIR + 'trained' + model_filename
+        
+        model_data = {
+            'model': model,
+            'tokenizer': tokenizer,
+            'label_encoder': preprocessor.label_encoder,
+            'max_len': max_len,
+            'metrics': {
+                'accuracy': accuracy
+            }
+        }
+        
+        with open(model_path, 'wb') as file:
+            pickle.dump(model_data, file)
+        
+        return model
 
 
     def train_naive_bayes(self):
@@ -190,11 +224,6 @@ class ModelTrainer:
         best_structure = hc.estimate(scoring_method=BicScore(df_features))
         self.trained_model = BayesianNetwork(best_structure.edges())
         self.trained_model.fit(df_features, estimator=BayesianEstimator, prior_type='BDeu')
-
-        # Save the trained model.
-        save_path = os.path.join(MODEL_DIR, 'bayesian_network_model.pkl')
-        with open(save_path, 'wb') as f:
-            pickle.dump(self.trained_model, f)
         
         return self.trained_model
 
@@ -211,6 +240,11 @@ class ModelTrainer:
         Returns:
             A trained HMM instance
         """
+        import os
+        import numpy as np
+        from hmmlearn import hmm
+        import pickle
+        from src.config import MODEL_DIR
         
         # Convert sparse matrix to dense format if needed
         if hasattr(X_train, "toarray"):

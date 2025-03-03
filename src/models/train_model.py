@@ -16,7 +16,10 @@ from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.layers import Embedding
 from tensorflow.keras.utils import to_categorical
 from sklearn.preprocessing import LabelEncoder
+from src.config import MODEL_DIR
 import matplotlib.pyplot as plt
+import os
+import pickle
 
 class ModelTrainer:
     """
@@ -185,6 +188,11 @@ class ModelTrainer:
         best_structure = hc.estimate(scoring_method=BicScore(df_features))
         self.trained_model = BayesianNetwork(best_structure.edges())
         self.trained_model.fit(df_features, estimator=BayesianEstimator, prior_type='BDeu')
+
+        # Save the trained model.
+        save_path = os.path.join(MODEL_DIR, 'bayesian_network_model.pkl')
+        with open(save_path, 'wb') as f:
+            pickle.dump(self.trained_model, f)
         
         return self.trained_model
 

@@ -1,9 +1,12 @@
 # src/models/predict_model.py
 import os
 import pickle
+import torch
 import numpy as np
 import pandas as pd
+from pathlib import Path
 from pgmpy.inference import VariableElimination
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 from src.config import *
 
 class ModelPredictor:
@@ -17,28 +20,79 @@ class ModelPredictor:
         """
         pass
 
-    def predict_neural_network(self, test_texts):
+    def predict_neural_network(self, headlines, model_path=None):
         """
-        Makes predictions using the trained BERT model.
-
+        Makes predictions using the trained Neural Network model.
+        
         Args:
-            test_texts (list): List of test text samples.
+            headlines: A string or list of strings containing news headlines to predict
+            model_path: Optional path to a specific model file. If None, uses the most recent model.
             
         Returns:
-            Predictions: List of predicted sentiment labels.
+            A list of dictionaries containing the original headline, predicted sentiment, 
+            and confidence scores.
         """
-        # Tokenize the test data
-        test_encodings = self.tokenizer(test_texts, truncation=True, padding=True, max_length=256, return_tensors="pt")
-
-        # Get model predictions
-        with torch.no_grad():
-            outputs = self.model(**test_encodings)
-            logits = outputs.logits
-
-        # Get predicted classes
-        predictions = torch.argmax(logits, dim=-1).tolist()
-
-        return predictions
+        # Convert single headline to list for consistent processing
+        if isinstance(headlines, str):
+            headlines = [headlines]
+            
+        # Find the most recent model if no path is provided
+        if model_path is None:
+            model_dir = Path(MODEL_DIR)
+            models = list(model_dir.glob('neural_network_*.pkl'))
+            if not models:
+                model_dir = Path(EXPERIMENT_DIR)
+                models = list(model_dir.glob('neural_network_*.pkl'))
+            if not models:
+                print(f"No models found in {model_dir}")
+                return None
+                
+            # Sort models by creation time and get the most recent
+            model_path = str(sorted(models, key=os.path.getmtime)[-1])
+            print(f"Using most recent model: {model_path}")
+        
+        # Load the model
+        try:
+            with open(model_path, 'rb') as f:
+                model_data = pickle.load(f)
+                
+            # Extract model components
+            model = model_data['model']
+            tokenizer = model_data['tokenizer']
+            label_encoder = model_data['label_encoder']
+            max_len = model_data.get('max_len', 100)  # Default to 100 if not specified
+            
+            # Process the headlines
+            sequences = tokenizer.texts_to_sequences(headlines)
+            padded_sequences = pad_sequences(sequences, maxlen=max_len)
+            
+            # Generate predictions
+            prediction_probs = model.predict(padded_sequences)
+            
+            # Process results
+            results = []
+            for i, headline in enumerate(headlines):
+                probs = prediction_probs[i]
+                predicted_class_idx = np.argmax(probs)
+                predicted_sentiment = label_encoder.inverse_transform([predicted_class_idx])[0]
+                
+                # Create result dictionary
+                result = {
+                    'headline': headline,
+                    'sentiment': predicted_sentiment,
+                    'confidence': float(probs[predicted_class_idx]),
+                    'probabilities': {
+                        label_encoder.inverse_transform([j])[0]: float(prob) 
+                        for j, prob in enumerate(probs)
+                    }
+                }
+                results.append(result)
+            
+            return results
+                
+        except Exception as e:
+            print(f"Error in predict_neural_network: {e}")
+            return None
 
     def predict_naive_bayes(self):
         """

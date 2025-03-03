@@ -166,7 +166,7 @@ class ModelTrainer:
         # Save the model and tokenizer
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         model_filename = f"neural_network_{timestamp}.pkl"
-        model_path = EXPERIMENT_DIR + 'trained' + model_filename
+        model_path = os.path.join(EXPERIMENT_DIR, model_filename)
         
         model_data = {
             'model': model,

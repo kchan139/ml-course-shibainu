@@ -45,8 +45,8 @@ class ModelPredictor:
         Makes predictions using the trained Naive Bayes model.
         """
         pass
-    @staticmethod
-    def predict_bayesian_network(test_text_data, model_trainer):
+
+    def predict_bayesian_network(self, test_text_data, model_trainer):
         """
         Args:
             test_text_data: Iterable (list, Series) of cleaned text strings.

@@ -1,6 +1,10 @@
 # src/models/predict_model.py
+import os
+import pickle
+import numpy as np
 import pandas as pd
 from pgmpy.inference import VariableElimination
+from src.config import *
 
 class ModelPredictor:
     """
@@ -13,39 +17,28 @@ class ModelPredictor:
         """
         pass
 
-    def predict_neural_network(self, test_vectorized_data, model_trainer):
+    def predict_neural_network(self, test_texts):
         """
-        Makes predictions using the trained Neural Network model.
-        
+        Makes predictions using the trained BERT model.
+
         Args:
-            test_vectorized_data: Vectorized test features (sparse matrix from TF-IDF)
-            model_trainer: An instance of ModelTrainer with a trained neural network
+            test_texts (list): List of test text samples.
             
         Returns:
-            Predictions as both probability distributions and class labels
+            Predictions: List of predicted sentiment labels.
         """
-        import numpy as np
-        
-        # Check if model exists
-        if not hasattr(model_trainer, 'nn_model'):
-            raise ValueError("No trained neural network found in the model_trainer")
-        
-        # Convert sparse matrix to dense array if needed
-        if hasattr(test_vectorized_data, "toarray"):
-            X_test_dense = test_vectorized_data.toarray()
-        else:
-            X_test_dense = test_vectorized_data
-        
-        # Make predictions
-        pred_probabilities = model_trainer.nn_model.predict(X_test_dense)
-        pred_classes = np.argmax(pred_probabilities, axis=1)
-        
-        # If a label encoder was used during training, map predictions back to original labels
-        if hasattr(model_trainer, 'label_encoder'):
-            pred_labels = model_trainer.label_encoder.inverse_transform(pred_classes)
-            return pred_probabilities, pred_labels
-        else:
-            return pred_probabilities, pred_classes
+        # Tokenize the test data
+        test_encodings = self.tokenizer(test_texts, truncation=True, padding=True, max_length=256, return_tensors="pt")
+
+        # Get model predictions
+        with torch.no_grad():
+            outputs = self.model(**test_encodings)
+            logits = outputs.logits
+
+        # Get predicted classes
+        predictions = torch.argmax(logits, dim=-1).tolist()
+
+        return predictions
 
     def predict_naive_bayes(self):
         """
@@ -92,8 +85,74 @@ class ModelPredictor:
             
         return predictions
 
-    def predict_hidden_markov_model(self):
+    def predict_hidden_markov_model(self, test_data, model_trainer=None, model_path=None):
         """
-        Makes predictions using the trained Hidden Markov Model.
+        Makes predictions using the trained Hidden Markov Models for sentiment analysis.
+        
+        Args:
+            test_data: Vectorized test features (sparse matrix from TF-IDF)
+            model_trainer: Optional - an instance of ModelTrainer with trained HMM models
+            model_path: Optional - path to the saved HMM models if model_trainer is not provided
+            
+        Returns:
+            Predicted sentiment labels
         """
-        pass
+        import numpy as np
+        import pickle
+        import os
+        from src.config import MODEL_DIR
+        
+        # Load models either from trainer or from file
+        if model_trainer is not None and hasattr(model_trainer, 'hmm_models'):
+            hmm_models = model_trainer.hmm_models
+        elif model_path is not None:
+            with open(model_path, "rb") as f:
+                hmm_models = pickle.load(f)
+        else:
+            # Default path
+            default_path = os.path.join(MODEL_DIR, "hmm_models.pkl")
+            with open(default_path, "rb") as f:
+                hmm_models = pickle.load(f)
+        
+        # Convert sparse matrix to dense format if needed
+        if hasattr(test_data, "toarray"):
+            test_data_dense = test_data.toarray()
+        else:
+            test_data_dense = test_data
+        
+        # Ensure the model dictionary is not empty
+        if not hmm_models:
+            raise ValueError("No HMM models were successfully trained")
+        
+        # Get all available sentiment labels
+        sentiments = list(hmm_models.keys())
+        
+        # Make predictions for each sample
+        predictions = []
+        
+        for i in range(test_data_dense.shape[0]):
+            sample = test_data_dense[i:i+1]  # Get one sample
+            
+            # Calculate log likelihood for each sentiment model
+            log_likelihoods = {}
+            for sentiment, model in hmm_models.items():
+                try:
+                    log_likelihood = model.score(sample)
+                    log_likelihoods[sentiment] = log_likelihood
+                except Exception as e:
+                    print(f"Error scoring sample {i} with model {sentiment}: {e}")
+                    # Instead of -inf, use a very low but finite score
+                    log_likelihoods[sentiment] = -1e10
+            
+            # Predict the sentiment with highest log likelihood
+            if log_likelihoods:
+                predicted_sentiment = max(log_likelihoods, key=log_likelihoods.get)
+                predictions.append(predicted_sentiment)
+            else:
+                # Default to most common sentiment if all models fail
+                most_common_sentiment = max(sentiments, key=lambda s: len(hmm_models[s].monitor_.history))
+                predictions.append(most_common_sentiment)
+        
+        return np.array(predictions)
+    
+

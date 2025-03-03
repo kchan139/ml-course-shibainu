@@ -1,8 +1,12 @@
 # src/models/train_model.py
+import os
+import numpy as np
 import pandas as pd
+import torch
+import pickle
+from sklearn.preprocessing import StandardScaler
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_selection import chi2, SelectKBest
-from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, classification_report
@@ -20,11 +24,41 @@ from src.config import MODEL_DIR
 import matplotlib.pyplot as plt
 import os
 import pickle
+from transformers import BertTokenizer, BertForSequenceClassification, Trainer, TrainingArguments
+from sklearn.model_selection import train_test_split
+from hmmlearn import hmm
+from datasets import Dataset
+from src.config import *
+
+def _compute_class_weights(self, y):
+    """
+    Compute class weights to handle potential class imbalance.
+    
+    Args:
+        y: Training labels (encoded)
+    
+    Returns:
+        Dictionary of class weights
+    """
+    unique_classes = np.unique(y)
+    class_counts = np.bincount(y)
+    total_samples = len(y)
+    
+    # Compute weights inversely proportional to class frequencies
+    weights = {
+        cls: total_samples / (len(unique_classes) * count) 
+        for cls, count in zip(unique_classes, class_counts)
+    }
+    
+    return weights
 
 class ModelTrainer:
     """
     This class is responsible for training different models using the processed features.
     """
+    def __init__(self):
+        self.model = None
+        self.tokenizer = None
 
     def train_decision_tree(self, vectorized_data, labels):
         """
@@ -48,104 +82,72 @@ class ModelTrainer:
 
         return self.decision_tree_model
 
-    def train_neural_network(self, X_train_vec, y_train, X_test_vec=None, y_test=None, epochs=10, batch_size=32):
+    def train_neural_network(self, X_train, y_train, X_test=None, y_test=None, epochs=3, batch_size=8):
         """
-        Trains a neural network model for sentiment classification.
-
+        Trains a neural network using BERT for text classification.
+        
         Args:
-            X_train_vec: Vectorized training features (sparse matrix from TF-IDF)
-            y_train: Training labels
-            X_test_vec: Optional vectorized test features
-            y_test: Optional test labels
-            epochs: Number of training epochs
-            batch_size: Batch size for training
-
-        Returns:
-            Trained neural network model
+            X_train (list): List of training text samples.
+            y_train (list): List of training labels.
+            X_test (list): Optional list of test text samples.
+            y_test (list): Optional test labels.
+            epochs (int): Number of epochs.
+            batch_size (int): Batch size for training.
         """
+        # Initialize BERT tokenizer
+        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        
+        # Tokenize the training data
+        train_encodings = self.tokenizer(X_train, truncation=True, padding=True, max_length=256)
+        
+        if X_test is not None:
+            test_encodings = self.tokenizer(X_test, truncation=True, padding=True, max_length=256)
+        else:
+            test_encodings = None
 
-        # Convert sparse matrix to dense numpy array if needed
-        X_train_dense = X_train_vec.toarray() if hasattr(X_train_vec, "toarray") else X_train_vec
-        X_test_dense = X_test_vec.toarray() if X_test_vec is not None and hasattr(X_test_vec, "toarray") else X_test_vec
+        # Convert the training and test data to datasets
+        train_dataset = Dataset.from_dict({
+            'input_ids': train_encodings['input_ids'],
+            'attention_mask': train_encodings['attention_mask'],
+            'labels': y_train
+        })
+        
+        if X_test is not None:
+            test_dataset = Dataset.from_dict({
+                'input_ids': test_encodings['input_ids'],
+                'attention_mask': test_encodings['attention_mask'],
+                'labels': y_test
+            })
+        else:
+            test_dataset = None
 
-        # Encode labels if they're not already encoded
-        if not isinstance(y_train[0], (int, np.integer)):
-            self.label_encoder = LabelEncoder()
-            y_train = self.label_encoder.fit_transform(y_train)
-            if y_test is not None:
-                y_test = self.label_encoder.transform(y_test)
+        # Load pre-trained BERT model for sequence classification
+        self.model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=len(set(y_train)))
 
-        # Convert labels to one-hot encoding
-        num_classes = len(np.unique(y_train))
-        y_train_cat = to_categorical(y_train, num_classes)
-        y_test_cat = to_categorical(y_test, num_classes) if y_test is not None else None
-
-        # Define the model architecture
-        embedding_matrix = load_glove_embeddings()
-        self.nn_model = Sequential([
-            Embedding(input_dim=vocab_size, output_dim=300, weights=[embedding_matrix], input_length=max_length, trainable=False),
-            LSTM(128),
-            Dropout(0.3),
-            Dense(num_classes, activation='softmax')
-        ])
-
-        # Compile the model
-        self.nn_model.compile(
-            optimizer=Adam(learning_rate=0.001),
-            loss='categorical_crossentropy',
-            metrics=['accuracy']
+        # Define training arguments
+        training_args = TrainingArguments(
+            output_dir='./results',          # output directory
+            num_train_epochs=epochs,         # number of training epochs
+            per_device_train_batch_size=batch_size,  # batch size for training
+            per_device_eval_batch_size=batch_size,   # batch size for evaluation
+            warmup_steps=500,                # number of warmup steps for learning rate scheduler
+            weight_decay=0.01,               # strength of weight decay
+            logging_dir='./logs',            # directory for storing logs
+            evaluation_strategy="epoch"      # evaluation strategy
         )
 
-        # Define early stopping
-        early_stopping = EarlyStopping(
-            monitor='val_loss',
-            patience=3,
-            restore_best_weights=True
+        # Initialize Trainer
+        trainer = Trainer(
+            model=self.model,                     # the model to train
+            args=training_args,                  # training arguments, defined above
+            train_dataset=train_dataset,         # training dataset
+            eval_dataset=test_dataset            # evaluation dataset
         )
 
         # Train the model
-        if X_test_dense is not None and y_test is not None:
-            history = self.nn_model.fit(
-                X_train_dense, y_train_cat,
-                epochs=epochs,
-                batch_size=batch_size,
-                validation_data=(X_test_dense, y_test_cat),
-                callbacks=[early_stopping]
-            )
-        else:
-            history = self.nn_model.fit(
-                X_train_dense, y_train_cat,
-                epochs=epochs,
-                batch_size=batch_size,
-                validation_split=0.2,  # Use 20% of the training data for validation
-                callbacks=[early_stopping]
-            )
+        trainer.train()
 
-        # Plot the training history
-        plt.figure(figsize=(12, 4))
-
-        # Plot accuracy
-        plt.subplot(1, 2, 1)
-        plt.plot(history.history['accuracy'], label='Training Accuracy')
-        plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
-        plt.title('Model Accuracy')
-        plt.xlabel('Epoch')
-        plt.ylabel('Accuracy')
-        plt.legend()
-
-        # Plot loss
-        plt.subplot(1, 2, 2)
-        plt.plot(history.history['loss'], label='Training Loss')
-        plt.plot(history.history['val_loss'], label='Validation Loss')
-        plt.title('Model Loss')
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        plt.legend()
-
-        plt.tight_layout()
-        plt.show()
-
-        return self.nn_model
+        return self.model
 
 
     def train_naive_bayes(self):
@@ -196,8 +198,68 @@ class ModelTrainer:
         
         return self.trained_model
 
-    def train_hidden_markov_model(self):
+    def train_hidden_markov_model(self, X_train, y_train, n_components=2, random_state=42):
         """
-        Trains the Hidden Markov Model for emotion prediction in songs.
+        Trains a Hidden Markov Model (HMM) using the preprocessed data for sentiment analysis.
+        
+        Args:
+            X_train: Vectorized training features (sparse matrix from TF-IDF)
+            y_train: Training labels (sentiment)
+            n_components: Number of hidden states in the HMM (default=2)
+            random_state: Random seed for reproducibility
+            
+        Returns:
+            A trained HMM instance
         """
-        pass
+        
+        # Convert sparse matrix to dense format if needed
+        if hasattr(X_train, "toarray"):
+            X_train_dense = X_train.toarray()
+        else:
+            X_train_dense = X_train
+        
+        # Apply StandardScaler to normalize features
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train_dense)
+
+        # Determine the number of distinct sentiments/classes
+        n_labels = len(np.unique(y_train))
+        
+        # Create and train separate HMM for each sentiment class
+        hmm_models = {}
+        
+        for sentiment in range(n_labels):
+            # Filter data for current sentiment
+            X_sentiment = X_train_scaled[y_train == sentiment]
+            
+            if len(X_sentiment) < n_components:
+                print(f"Warning: Not enough samples ({len(X_sentiment)}) for sentiment {sentiment} with {n_components} components")
+                continue
+                
+            # Train HMM for this sentiment
+            sentiment_model = hmm.GaussianHMM(
+                n_components=n_components,
+                covariance_type="full",
+                n_iter=200,  # Increased iterations
+                random_state=random_state
+            )
+            
+            # Fit the model
+            try:
+                sentiment_model.fit(X_sentiment)
+                hmm_models[sentiment] = sentiment_model
+                print(f"Successfully trained HMM for sentiment {sentiment} with {len(X_sentiment)} samples")
+            except Exception as e:
+                print(f"Error training HMM for sentiment {sentiment}: {e}")
+        
+        # Save the models
+        file_path = os.path.join(MODEL_DIR, "hmm_models.pkl")
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)  # Ensure directory exists
+        with open(file_path, "wb") as f:
+            pickle.dump(hmm_models, f)
+        print(f"HMM models saved at: {file_path}")
+        
+        # Store the models in the instance for later use
+        self.hmm_models = hmm_models
+        
+        return hmm_models

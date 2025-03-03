@@ -12,6 +12,18 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, classification_report
 from pgmpy.models import BayesianNetwork  # or BayesianModel (deprecated, use BayesianNetwork)
 from pgmpy.estimators import HillClimbSearch, BicScore, BayesianEstimator
+import numpy as np
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.layers import Embedding
+from tensorflow.keras.utils import to_categorical
+from sklearn.preprocessing import LabelEncoder
+from src.config import MODEL_DIR
+import matplotlib.pyplot as plt
+import os
+import pickle
 from transformers import BertTokenizer, BertForSequenceClassification, Trainer, TrainingArguments
 from sklearn.model_selection import train_test_split
 from hmmlearn import hmm
@@ -178,6 +190,11 @@ class ModelTrainer:
         best_structure = hc.estimate(scoring_method=BicScore(df_features))
         self.trained_model = BayesianNetwork(best_structure.edges())
         self.trained_model.fit(df_features, estimator=BayesianEstimator, prior_type='BDeu')
+
+        # Save the trained model.
+        save_path = os.path.join(MODEL_DIR, 'bayesian_network_model.pkl')
+        with open(save_path, 'wb') as f:
+            pickle.dump(self.trained_model, f)
         
         return self.trained_model
 

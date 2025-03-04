@@ -72,7 +72,7 @@ class ModelTrainer:
         return self.decision_tree_model
 
     def train_neural_network(self, preprocessor=None, file_path=None, max_words=3000, 
-                    embedding_dim=32, max_len=30, epochs=20, batch_size=32):
+                    embedding_dim=32, max_len=30, epochs=20, batch_size=16):
         """
         Trains a balanced RNN model for news headline sentiment classification,
         with specific handling for class imbalance.
@@ -134,7 +134,7 @@ class ModelTrainer:
         # Define model architecture for better class separation
         model = Sequential([
             # Embedding
-            Embedding(max_words, embedding_dim, input_length=max_len),
+            Embedding(max_words, embedding_dim),
             
             # Bidirectional LSTM for better context capture
             Bidirectional(LSTM(32, return_sequences=True)),

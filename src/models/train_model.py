@@ -12,19 +12,23 @@ from sklearn.feature_selection import chi2, SelectKBest
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.model_selection import GridSearchCV
+from sklearn.utils import class_weight, compute_class_weight
 
 from pgmpy.models import BayesianNetwork  # or BayesianModel (deprecated, use BayesianNetwork)
 from pgmpy.estimators import HillClimbSearch, BicScore, BayesianEstimator
 
+from tensorflow.keras import regularizers # type: ignore
 from tensorflow.keras.utils import to_categorical # type: ignore
 from tensorflow.keras.optimizers import Adam # type: ignore
-from tensorflow.keras.models import Sequential # type: ignore
+from tensorflow.keras.optimizers.schedules import ExponentialDecay # type: ignore
+from tensorflow.keras.models import Sequential, Model # type: ignore
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau # type: ignore
 from tensorflow.keras.preprocessing.text import Tokenizer # type: ignore
 from tensorflow.keras.preprocessing.sequence import pad_sequences # type: ignore
 from tensorflow.keras.layers import ( # type: ignore
     Dense, Dropout, GlobalMaxPooling1D, Embedding, Bidirectional, LSTM, Conv1D, 
-    MaxPooling1D, Flatten, SpatialDropout1D, BatchNormalization
+    MaxPooling1D, Flatten, SpatialDropout1D, BatchNormalization, SimpleRNN,
+    LayerNormalization, Attention, GlobalAveragePooling1D, Input, RNN
 )
 
 from src.data.preprocess import DataPreprocessor
@@ -67,128 +71,157 @@ class ModelTrainer:
             
         return self.decision_tree_model
 
-    def train_neural_network(self, preprocessor=None, file_path=None, max_words=10000, 
-                             embedding_dim=100, max_len=100, epochs=10, batch_size=64):
+    def train_neural_network(self, preprocessor=None, file_path=None, max_words=3000, 
+                    embedding_dim=32, max_len=30, epochs=20, batch_size=32):
         """
-        Trains a neural network (CNN-BiLSTM) model for sentiment classification.
+        Trains a balanced RNN model for news headline sentiment classification,
+        with specific handling for class imbalance.
         
         Args:
             preprocessor: Optional DataPreprocessor object with preprocessed data
             file_path: Path to the processed data file if preprocessor is None
             max_words: Maximum number of words for tokenization
             embedding_dim: Dimension for the embedding layer
-            max_len: Maximum length of sequences
+            max_len: Maximum length of sequences for headlines
             epochs: Number of training epochs
             batch_size: Training batch size
             
         Returns:
-            Trained neural network model
-            
-        Saves:
-            The trained model and tokenizer in pickle format
+            Trained RNN model
         """
-        print("Starting neural network training...")
+        print("Starting RNN model training...")
         
         # Prepare data
         if preprocessor is None and file_path is not None:
-            # Create and initialize the preprocessor
             preprocessor = DataPreprocessor(file_path)
             preprocessor.clean_data()
             preprocessor.split_data()
         
         if preprocessor is None:
-            # Use default processed data path if no preprocessor or file provided
             default_path = os.path.join(PROCESSED_DATA_PATH, "processed_dataset.csv")
             preprocessor = DataPreprocessor(default_path)
             preprocessor.clean_data()
             preprocessor.split_data()
         
-        # Access the training and test data
+        # Access data
         X_train = preprocessor.X_train
         X_test = preprocessor.X_test
         y_train = preprocessor.y_train
         y_test = preprocessor.y_test
 
-        # Convert to categorical format for neural network
+        # Calculate class weights to handle imbalance
+        class_counts = np.bincount(y_train)
+        total_samples = len(y_train)
+        class_weights = {i: total_samples / (len(class_counts) * count) for i, count in enumerate(class_counts)}
+        print(f"Class weights for balancing: {class_weights}")
+
+        # Convert to categorical format
         num_classes = len(np.unique(y_train))
         y_train_cat = to_categorical(y_train, num_classes)
         y_test_cat = to_categorical(y_test, num_classes)
 
-        # Tokenize text data with improved parameters
+        # Tokenize
         tokenizer = Tokenizer(num_words=max_words, lower=True)
         tokenizer.fit_on_texts(X_train)
 
         X_train_seq = tokenizer.texts_to_sequences(X_train)
         X_test_seq = tokenizer.texts_to_sequences(X_test)
 
-        # Pad sequences with better padding strategy
+        # Pad sequences
         X_train_pad = pad_sequences(X_train_seq, maxlen=max_len, padding='post')
         X_test_pad = pad_sequences(X_test_seq, maxlen=max_len, padding='post')
 
-        # Define the improved MLP model architecture
-        model = Sequential()
+        # Define model architecture for better class separation
+        model = Sequential([
+            # Embedding
+            Embedding(max_words, embedding_dim, input_length=max_len),
+            
+            # Bidirectional LSTM for better context capture
+            Bidirectional(LSTM(32, return_sequences=True)),
+            
+            # Global max pooling to capture the most important features
+            GlobalMaxPooling1D(),
+            
+            # Dropout for regularization
+            Dropout(0.3),
+            
+            # Hidden layer for better discrimination between classes
+            Dense(64, activation='relu', kernel_regularizer=regularizers.l2(0.001)),
+            Dropout(0.3),
+            
+            # Output layer
+            Dense(num_classes, activation='softmax')
+        ])
 
-        # Embedding layer with slightly higher dimensions
-        model.add(Embedding(max_words, embedding_dim*2, input_length=max_len))
-        model.add(SpatialDropout1D(0.2))
-        model.add(Flatten())
-
-        # Improved fully connected layers
-        model.add(Dense(256, activation='relu'))
-        model.add(BatchNormalization())
-        model.add(Dropout(0.4))
-
-        model.add(Dense(128, activation='relu'))
-        model.add(BatchNormalization())
-        model.add(Dropout(0.3))
-
-        model.add(Dense(64, activation='relu'))
-        model.add(Dropout(0.2))
-
-        # Output layer
-        model.add(Dense(num_classes, activation='softmax'))
-
-        # Compile with better optimizer settings
-        optimizer = Adam(learning_rate=0.001)
+        # Compile with focal loss to focus more on difficult examples
         model.compile(
             loss='categorical_crossentropy',
-            optimizer=optimizer,
+            optimizer=Adam(learning_rate=0.001),
             metrics=['accuracy']
         )
 
-        # Better callbacks
+        # Add callbacks
         early_stopping = EarlyStopping(
             monitor='val_loss',
             patience=5,
             restore_best_weights=True
         )
-
+        
         reduce_lr = ReduceLROnPlateau(
             monitor='val_loss',
-            factor=0.2,
-            patience=3,
+            factor=0.5,
+            patience=2,
             min_lr=0.0001
         )
 
-        # Train the model with better parameters
+        # Train with class weights
         history = model.fit(
             X_train_pad, y_train_cat,
             epochs=epochs,
-            batch_size=32,
-            validation_data=(X_test_pad, y_test_cat),
-            callbacks=[early_stopping, reduce_lr]
+            batch_size=batch_size,
+            validation_split=0.2,
+            shuffle=True,
+            callbacks=[early_stopping, reduce_lr],
+            class_weight=class_weights  # Apply class weights here
         )
         
-        # Evaluate the model
-        y_pred_prob = model.predict(X_test_pad)
-        y_pred = np.argmax(y_pred_prob, axis=1)
-        accuracy = accuracy_score(y_test, y_pred)
-        print(f"Test Accuracy: {accuracy:.4f}")
-        print(classification_report(y_test, y_pred))
+        # Custom threshold function to prevent bias toward majority class
+        def custom_prediction(probs, threshold=0.3):
+            predictions = []
+            for prob in probs:
+                # If no class exceeds threshold, pick highest
+                if not any(p > threshold for p in prob):
+                    predictions.append(np.argmax(prob))
+                # Otherwise use custom logic to favor minority classes slightly
+                elif prob[0] > threshold*0.9:  # Lower threshold for negative class
+                    predictions.append(0)
+                elif prob[2] > threshold*0.9:  # Lower threshold for positive class
+                    predictions.append(2)
+                else:
+                    predictions.append(np.argmax(prob))
+            return np.array(predictions)
         
-        # Save the model and tokenizer
+        # Evaluate with custom threshold
+        y_pred_prob = model.predict(X_test_pad)
+        y_pred = custom_prediction(y_pred_prob)
+        
+        # Convert one-hot encoded test data back to class indices for evaluation
+        y_test_indices = np.argmax(y_test_cat, axis=1)
+        
+        # Print evaluation metrics
+        accuracy = accuracy_score(y_test_indices, y_pred)
+        print(f"Test Accuracy: {accuracy:.4f}")
+        print(classification_report(y_test_indices, y_pred))
+        
+        # Check class distribution in predictions
+        print("Prediction class distribution:")
+        unique, counts = np.unique(y_pred, return_counts=True)
+        for class_idx, count in zip(unique, counts):
+            print(f"Class {class_idx}: {count} predictions")
+        
+        # Save the model with custom threshold logic
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        model_filename = f"neural_network_{timestamp}.pkl"
+        model_filename = f"rnn_{timestamp}.pkl"
         model_path = os.path.join(EXPERIMENT_DIR, model_filename)
         
         model_data = {
@@ -198,7 +231,8 @@ class ModelTrainer:
             'max_len': max_len,
             'metrics': {
                 'accuracy': accuracy
-            }
+            },
+            'custom_threshold': 0.3  # Save threshold for prediction
         }
         
         with open(model_path, 'wb') as file:

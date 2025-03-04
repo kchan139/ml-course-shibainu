@@ -17,12 +17,14 @@ from pgmpy.models import BayesianNetwork  # or BayesianModel (deprecated, use Ba
 from pgmpy.estimators import HillClimbSearch, BicScore, BayesianEstimator
 
 from tensorflow.keras.utils import to_categorical # type: ignore
+from tensorflow.keras.optimizers import Adam # type: ignore
 from tensorflow.keras.models import Sequential # type: ignore
-from tensorflow.keras.callbacks import EarlyStopping # type: ignore
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau # type: ignore
 from tensorflow.keras.preprocessing.text import Tokenizer # type: ignore
 from tensorflow.keras.preprocessing.sequence import pad_sequences # type: ignore
 from tensorflow.keras.layers import ( # type: ignore
-    Dense, Dropout, GlobalMaxPooling1D, Embedding, Bidirectional, LSTM, Conv1D, MaxPooling1D
+    Dense, Dropout, GlobalMaxPooling1D, Embedding, Bidirectional, LSTM, Conv1D, 
+    MaxPooling1D, Flatten, SpatialDropout1D, BatchNormalization
 )
 
 from src.data.preprocess import DataPreprocessor
@@ -106,65 +108,75 @@ class ModelTrainer:
         X_test = preprocessor.X_test
         y_train = preprocessor.y_train
         y_test = preprocessor.y_test
-        
+
         # Convert to categorical format for neural network
         num_classes = len(np.unique(y_train))
         y_train_cat = to_categorical(y_train, num_classes)
         y_test_cat = to_categorical(y_test, num_classes)
-        
-        # Tokenize text data
-        tokenizer = Tokenizer(num_words=max_words)
+
+        # Tokenize text data with improved parameters
+        tokenizer = Tokenizer(num_words=max_words, lower=True)
         tokenizer.fit_on_texts(X_train)
-        
+
         X_train_seq = tokenizer.texts_to_sequences(X_train)
         X_test_seq = tokenizer.texts_to_sequences(X_test)
-        
-        # Pad sequences to ensure uniform length
-        X_train_pad = pad_sequences(X_train_seq, maxlen=max_len)
-        X_test_pad = pad_sequences(X_test_seq, maxlen=max_len)
-        
-        # Define the CNN-BiLSTM model architecture
+
+        # Pad sequences with better padding strategy
+        X_train_pad = pad_sequences(X_train_seq, maxlen=max_len, padding='post')
+        X_test_pad = pad_sequences(X_test_seq, maxlen=max_len, padding='post')
+
+        # Define the improved MLP model architecture
         model = Sequential()
-        
-        # Embedding layer
-        model.add(Embedding(max_words, embedding_dim, input_length=max_len))
-        
-        # CNN layers
-        model.add(Conv1D(128, 5, activation='relu'))
-        model.add(MaxPooling1D(5))
-        model.add(Conv1D(64, 5, activation='relu'))
-        
-        # BiLSTM layer
-        model.add(Bidirectional(LSTM(64, return_sequences=True)))
+
+        # Embedding layer with slightly higher dimensions
+        model.add(Embedding(max_words, embedding_dim*2, input_length=max_len))
+        model.add(SpatialDropout1D(0.2))
+        model.add(Flatten())
+
+        # Improved fully connected layers
+        model.add(Dense(256, activation='relu'))
+        model.add(BatchNormalization())
+        model.add(Dropout(0.4))
+
+        model.add(Dense(128, activation='relu'))
+        model.add(BatchNormalization())
         model.add(Dropout(0.3))
-        
-        # Global pooling and dense layers
-        model.add(GlobalMaxPooling1D())
+
         model.add(Dense(64, activation='relu'))
-        model.add(Dropout(0.5))
+        model.add(Dropout(0.2))
+
+        # Output layer
         model.add(Dense(num_classes, activation='softmax'))
-        
-        # Compile the model
+
+        # Compile with better optimizer settings
+        optimizer = Adam(learning_rate=0.001)
         model.compile(
             loss='categorical_crossentropy',
-            optimizer='adam',
+            optimizer=optimizer,
             metrics=['accuracy']
         )
-        
-        # Early stopping to prevent overfitting
+
+        # Better callbacks
         early_stopping = EarlyStopping(
             monitor='val_loss',
-            patience=3,
+            patience=5,
             restore_best_weights=True
         )
-        
-        # Train the model
+
+        reduce_lr = ReduceLROnPlateau(
+            monitor='val_loss',
+            factor=0.2,
+            patience=3,
+            min_lr=0.0001
+        )
+
+        # Train the model with better parameters
         history = model.fit(
             X_train_pad, y_train_cat,
             epochs=epochs,
-            batch_size=batch_size,
+            batch_size=32,
             validation_data=(X_test_pad, y_test_cat),
-            callbacks=[early_stopping]
+            callbacks=[early_stopping, reduce_lr]
         )
         
         # Evaluate the model

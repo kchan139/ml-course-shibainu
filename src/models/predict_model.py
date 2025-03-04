@@ -1,12 +1,13 @@
 # src/models/predict_model.py
 import os
 import pickle
-import torch
 import numpy as np
 import pandas as pd
+
 from pathlib import Path
 from pgmpy.inference import VariableElimination
-from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.preprocessing.sequence import pad_sequences # type: ignore
+
 from src.config import *
 
 class ModelPredictor:
@@ -14,11 +15,21 @@ class ModelPredictor:
     This class handles making predictions using the trained models.
     """
 
-    def predict_decision_tree(self):
+    def predict_decision_tree(self, X_test, model_trainer):
         """
-        Makes predictions using the trained Decision Tree model.
+        Makes predictions using the trained Decision Tree model stored in the provided ModelTrainer instance.
+        
+        Args:
+            X_test: Feature matrix (e.g., array or sparse matrix) for the test data.
+            model_trainer: An instance of ModelTrainer that has a trained decision tree model (e.g., 
+                           accessible via model_trainer.decision_tree_model).
+        
+        Returns:
+            Array-like predicted labels for the test data.
         """
-        pass
+        # Use the trained decision tree model from the ModelTrainer instance to predict labels.
+        predictions = model_trainer.decision_tree_model.predict(X_test)
+        return predictions
 
     def predict_neural_network(self, headlines, model_path=None):
         """
@@ -151,10 +162,6 @@ class ModelPredictor:
         Returns:
             Predicted sentiment labels
         """
-        import numpy as np
-        import pickle
-        import os
-        from src.config import MODEL_DIR
         
         # Load models either from trainer or from file
         if model_trainer is not None and hasattr(model_trainer, 'hmm_models'):

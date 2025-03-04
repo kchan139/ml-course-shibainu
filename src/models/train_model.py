@@ -1,29 +1,30 @@
 # src/models/train_model.py
+import os
+import pickle
+import numpy as np
 import pandas as pd
+from hmmlearn import hmm
+from datetime import datetime
+
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_selection import chi2, SelectKBest
-from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, classification_report
+from sklearn.model_selection import GridSearchCV
+
 from pgmpy.models import BayesianNetwork  # or BayesianModel (deprecated, use BayesianNetwork)
 from pgmpy.estimators import HillClimbSearch, BicScore, BayesianEstimator
-from hmmlearn import hmm
-from datetime import datetime
-import pickle
-import numpy as np
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import EarlyStopping
-from tensorflow.keras.layers import Embedding, Bidirectional, LSTM, Conv1D, MaxPooling1D
-from tensorflow.keras.layers import Dense, Dropout, GlobalMaxPooling1D
-from tensorflow.keras.regularizers import l2
-from tensorflow.keras.utils import to_categorical
-from tensorflow.keras.preprocessing.text import Tokenizer
-from tensorflow.keras.preprocessing.sequence import pad_sequences
-from sklearn.preprocessing import LabelEncoder
-from ..features.build_features import FeatureExtractor
+
+from tensorflow.keras.utils import to_categorical # type: ignore
+from tensorflow.keras.models import Sequential # type: ignore
+from tensorflow.keras.callbacks import EarlyStopping # type: ignore
+from tensorflow.keras.preprocessing.text import Tokenizer # type: ignore
+from tensorflow.keras.preprocessing.sequence import pad_sequences # type: ignore
+from tensorflow.keras.layers import ( # type: ignore
+    Dense, Dropout, GlobalMaxPooling1D, Embedding, Bidirectional, LSTM, Conv1D, MaxPooling1D
+)
+
 from src.data.preprocess import DataPreprocessor
 from src.config import *
 
@@ -32,26 +33,36 @@ class ModelTrainer:
     This class is responsible for training different models using the processed features.
     """
 
-    def train_decision_tree(self, vectorized_data, labels):
+    def train_decision_tree(self, X_train, y_train):
         """
-        Trains the Decision Tree model.
+        Trains a Decision Tree model.
 
         Args:
-            vectorized_data: Sparse matrix or array output from a vectorizer.
-            labels: Array-like structure with the numeric label for each sample.
-        """
-        # Split the dataset into training and testing sets
-        X_train, X_test, y_train, y_test = train_test_split(vectorized_data, labels, test_size=0.2, random_state=42)
-        
-        # Initialize and train the Decision Tree classifier
-        self.decision_tree_model = DecisionTreeClassifier(criterion="entropy", random_state=42)
-        self.decision_tree_model.fit(X_train, y_train)
-        
-        # Evaluate the model
-        y_pred = self.decision_tree_model.predict(X_test)
-        print(f"Decision Tree Accuracy: {accuracy_score(y_test, y_pred):.2f}")
-        print(classification_report(y_test, y_pred))
+            X_train: Feature matrix (e.g., sparse matrix or array) for training.
+            y_train: Array-like structure with the numeric labels for each training sample.
 
+        Returns:
+            A trained DecisionTreeClassifier instance.
+        """
+        
+        # Define a parameter grid for hyperparameter tuning
+        param_grid = {
+            'max_depth': [None, 5, 10, 15, 20, 25],
+            'min_samples_leaf': [1, 2, 4, 8, 16],
+            'criterion': ['entropy', 'gini']
+        }
+        
+        dt = DecisionTreeClassifier(random_state=42)
+        grid_search = GridSearchCV(dt, param_grid, cv=5, scoring='accuracy')
+        grid_search.fit(X_train, y_train)
+        
+        self.decision_tree_model = grid_search.best_estimator_
+        
+        # Save the trained model to the relative directory.
+        save_path = os.path.join(MODEL_DIR, 'decision_tree_model.pkl')
+        with open(save_path, 'wb') as f:
+            pickle.dump(self.decision_tree_model, f)
+            
         return self.decision_tree_model
 
     def train_neural_network(self, preprocessor=None, file_path=None, max_words=10000, 
@@ -240,11 +251,6 @@ class ModelTrainer:
         Returns:
             A trained HMM instance
         """
-        import os
-        import numpy as np
-        from hmmlearn import hmm
-        import pickle
-        from src.config import MODEL_DIR
         
         # Convert sparse matrix to dense format if needed
         if hasattr(X_train, "toarray"):

@@ -52,10 +52,10 @@ class ModelPredictor:
         # Find the most recent model if no path is provided
         if model_path is None:
             model_dir = Path(MODEL_DIR)
-            models = list(model_dir.glob('*rnn_model_*.pkl'))
+            models = list(model_dir.glob('*rnn_*.pkl'))
             if not models:
                 model_dir = Path(EXPERIMENT_DIR)
-                models = list(model_dir.glob('*rnn_model_*.pkl'))
+                models = list(model_dir.glob('*rnn_*.pkl'))
             if not models:
                 print(f"No models found in {model_dir}")
                 return None

@@ -289,7 +289,6 @@ class ModelTrainer:
         best_structure = hc.estimate(scoring_method=BicScore(df_features))
         self.trained_model = BayesianNetwork(best_structure.edges())
         self.trained_model.fit(df_features, estimator=BayesianEstimator, prior_type='BDeu')
-        print(best_structure.edges())
 
         # Save the trained model.
         save_path = os.path.join(MODEL_DIR, 'bayesian_network_model.pkl')

@@ -6,9 +6,10 @@ import pandas as pd
 from hmmlearn import hmm
 from datetime import datetime
 
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.feature_selection import chi2, SelectKBest
+from sklearn.feature_selection import chi2, SelectKBest, f_classif, mutual_info_classif
+from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.model_selection import GridSearchCV
@@ -33,6 +34,13 @@ from tensorflow.keras.layers import ( # type: ignore
 
 from src.data.preprocess import DataPreprocessor
 from src.config import *
+from gensim.models import Word2Vec
+from sklearn.preprocessing import KBinsDiscretizer
+import logging  
+from nltk.tokenize import sent_tokenize
+from sklearn.decomposition import PCA
+from sklearn.ensemble import RandomForestClassifier
+
 
 class ModelTrainer:
     """
@@ -281,7 +289,73 @@ class ModelTrainer:
         best_structure = hc.estimate(scoring_method=BicScore(df_features))
         self.trained_model = BayesianNetwork(best_structure.edges())
         self.trained_model.fit(df_features, estimator=BayesianEstimator, prior_type='BDeu')
+
+        # Save the trained model.
+        save_path = os.path.join(MODEL_DIR, 'bayesian_network_model.pkl')
+        with open(save_path, 'wb') as f:
+            pickle.dump(self.trained_model, f)
         
+        return self.trained_model
+
+    def train_bayesian_network_W2V(self, text_column, label_column, vector_size=70, window=5, min_count=1, n_bins=35):
+        """
+        Trains a Bayesian network using word2vec sentence embeddings.
+        
+        Args:
+            text_column: A list (or Series) containing the cleaned text.
+            label_column: A list (or Series) containing the labels.
+            vector_size: Dimensionality of the word vectors.
+            window: Maximum distance between the current and predicted word within a sentence.
+            min_count: Ignores all words with total frequency lower than this.
+            n_bins: Number of bins to discretize each feature.
+        
+        Returns:
+            A trained BayesianNetwork instance.
+        """
+        # 1. Tokenize the text: split each sentence into words.
+        sentences = [text.split() for text in text_column]
+        
+        logging.getLogger("gensim").setLevel(logging.WARNING)
+        # 2. Train a Word2Vec model on these tokenized sentences.
+        self.w2v_model = Word2Vec(sentences, vector_size=vector_size, window=window, min_count=min_count, workers=4)
+        
+        # Function to compute average embedding for a sentence.
+        def sentence_embedding(sentence, model):
+            # Only include words that exist in the model's vocabulary.
+            embeddings = [model.wv[word] for word in sentence if word in model.wv]
+            if embeddings:
+                return np.mean(embeddings, axis=0)
+            else:
+                # If no words in the sentence are in the vocabulary, return a zero vector.
+                return np.zeros(model.vector_size)
+        
+        # 3. Compute sentence embeddings for each text sample.
+        X_w2v = np.array([sentence_embedding(sent, self.w2v_model) for sent in sentences])
+
+        # 4. Discretize the continuous embeddings.
+        self.discretizer = KBinsDiscretizer(n_bins=n_bins, encode='ordinal', strategy='quantile')
+        X_discrete = self.discretizer.fit_transform(X_w2v)
+        
+        # Build a DataFrame from the discretized features.
+        feature_names = [f"feat_{i}" for i in range(X_discrete.shape[1])]
+        df_features = pd.DataFrame(X_discrete, columns=feature_names)
+        
+        # Ensure the labels are in a suitable format.
+        if not isinstance(label_column, pd.Series):
+            label_column = pd.Series(label_column)
+        df_features['label'] = label_column.values
+        
+        # 5. Learn the Bayesian Network structure and parameters.
+        hc = HillClimbSearch(df_features)
+        best_structure = hc.estimate(scoring_method=BicScore(df_features))
+        self.trained_model = BayesianNetwork(best_structure.edges())
+        self.trained_model.fit(df_features, estimator=BayesianEstimator, prior_type='BDeu')
+        
+        # 6. Save the trained model using a relative path.
+        save_path = os.path.join(MODEL_DIR, 'bayesian_network_model_W2V.pkl')
+        with open(save_path, 'wb') as f:
+            pickle.dump(self.trained_model, f)
+            
         return self.trained_model
 
     def train_hidden_markov_model(self, X_train, y_train, n_components=2, random_state=42):

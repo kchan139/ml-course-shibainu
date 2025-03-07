@@ -84,6 +84,56 @@ class ModelPredictor:
             predictions.append(predicted_label)
             
         return predictions
+    
+    def predict_bayesian_network_W2V(self, test_text_data, model_trainer):
+        """
+        Predicts labels using the trained Bayesian Network and word2vec-based sentence embeddings.
+
+        Args:
+            test_text_data: List/Series of cleaned text strings.
+            model_trainer: A ModelTrainer instance with:
+                - trained_model (BayesianNetwork)
+                - w2v_model (Word2Vec)
+                - discretizer (KBinsDiscretizer)
+
+        Returns:
+            List of predicted labels.
+        """
+
+        # Helper function: Compute average word embeddings
+        def sentence_embedding(sentence, model):
+            words = sentence.split()
+            vectors = [model.wv[word] for word in words if word in model.wv]
+            return np.mean(vectors, axis=0) if vectors else np.zeros(model.vector_size)
+
+        # Convert test text into embeddings
+        X_w2v_test = np.array([sentence_embedding(text, model_trainer.w2v_model) for text in test_text_data])
+
+        # Discretize using the trained discretizer
+        X_discrete_test = model_trainer.discretizer.transform(X_w2v_test)
+
+        # Clip values to avoid unseen bin numbers
+        X_discrete_test = np.clip(X_discrete_test, 0, model_trainer.discretizer.n_bins_[0] - 1)
+
+        # Create a DataFrame
+        feature_names = [f"feat_{i}" for i in range(X_discrete_test.shape[1])]
+        df_test = pd.DataFrame(X_discrete_test, columns=feature_names)
+
+        # Ensure only features that exist in the trained Bayesian Network are used
+        model_nodes = list(model_trainer.trained_model.nodes())  # Convert to list
+        valid_columns = list(set(model_nodes) & set(df_test.columns))  # Select only matching columns
+        df_test = df_test[valid_columns]
+
+        # Perform inference
+        infer = VariableElimination(model_trainer.trained_model)
+        predictions = []
+        for _, row in df_test.iterrows():
+            evidence = {col: int(row[col]) for col in df_test.columns}
+            query_result = infer.query(variables=["label"], evidence=evidence)
+            predictions.append(query_result.values.argmax())
+
+        return predictions
+
 
     def predict_hidden_markov_model(self, test_data, model_trainer=None, model_path=None):
         """

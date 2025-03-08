@@ -6,14 +6,14 @@ import pandas as pd
 from hmmlearn import hmm
 from datetime import datetime
 
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.feature_selection import chi2, SelectKBest, f_classif, mutual_info_classif
-from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.utils import compute_class_weight
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV
-from sklearn.utils import class_weight, compute_class_weight
+from sklearn.feature_selection import chi2, SelectKBest
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.metrics import accuracy_score, classification_report
 
 from pgmpy.models import BayesianNetwork  # or BayesianModel (deprecated, use BayesianNetwork)
 from pgmpy.estimators import HillClimbSearch, BicScore, BayesianEstimator
@@ -21,25 +21,19 @@ from pgmpy.estimators import HillClimbSearch, BicScore, BayesianEstimator
 from tensorflow.keras import regularizers # type: ignore
 from tensorflow.keras.utils import to_categorical # type: ignore
 from tensorflow.keras.optimizers import Adam # type: ignore
-from tensorflow.keras.optimizers.schedules import ExponentialDecay # type: ignore
-from tensorflow.keras.models import Sequential, Model # type: ignore
+from tensorflow.keras.models import Sequential # type: ignore
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau # type: ignore
 from tensorflow.keras.preprocessing.text import Tokenizer # type: ignore
 from tensorflow.keras.preprocessing.sequence import pad_sequences # type: ignore
 from tensorflow.keras.layers import ( # type: ignore
-    Dense, Dropout, GlobalMaxPooling1D, Embedding, Bidirectional, LSTM, Conv1D, 
-    MaxPooling1D, Flatten, SpatialDropout1D, BatchNormalization, SimpleRNN,
-    LayerNormalization, Attention, GlobalAveragePooling1D, Input, RNN
+    Dense, Dropout, GlobalMaxPooling1D, Embedding, Bidirectional, LSTM
 )
 
-from src.data.preprocess import DataPreprocessor
 from src.config import *
+from src.data.preprocess import DataPreprocessor
 from gensim.models import Word2Vec
 from sklearn.preprocessing import KBinsDiscretizer
-import logging  
-from nltk.tokenize import sent_tokenize
-from sklearn.decomposition import PCA
-from sklearn.ensemble import RandomForestClassifier
+import logging
 
 
 class ModelTrainer:
@@ -249,11 +243,96 @@ class ModelTrainer:
         return model
 
 
-    def train_naive_bayes(self):
+    def train_naive_bayes(self, preprocessor=None, file_path=None):
         """
-        Trains the Naive Bayes model using frequency analysis.
+        Trains a Multinomial Naive Bayes model using the preprocessed and vectorized data.
+        
+        Args:
+            preprocessor: Optional DataPreprocessor object with preprocessed data
+            file_path: Path to the processed data file if preprocessor is None
+            
+        Returns:
+            A dictionary containing the trained model, vectorizer and metrics
         """
-        pass
+        print("Starting Naive Bayes model training...")
+        
+        # Prepare data
+        if preprocessor is None and file_path is not None:
+            preprocessor = DataPreprocessor(file_path)
+            preprocessor.clean_data()
+            preprocessor.split_data()
+        
+        if preprocessor is None:
+            default_path = os.path.join(PROCESSED_DATA_PATH, "processed_dataset.csv")
+            preprocessor = DataPreprocessor(default_path)
+            preprocessor.clean_data()
+            preprocessor.split_data()
+        
+        # Vectorize the text data using the preprocessor's vectorizer
+        (X_train_vec, X_test_vec), vectorizer = preprocessor.vectorize_text()
+        y_train = preprocessor.y_train
+        y_test = preprocessor.y_test
+        
+        # Calculate class weights to handle imbalance
+        class_weights = compute_class_weight(
+            class_weight='balanced',
+            classes=np.unique(y_train),
+            y=y_train
+        )
+        
+        # Create class weight dictionary
+        weight_dict = {i: weight for i, weight in enumerate(class_weights)}
+        print(f"Class weights for balancing: {weight_dict}")
+        
+        # Train the model with hyperparameter tuning
+        print("Training Multinomial Naive Bayes model...")
+        param_grid = {
+            'alpha': [0.01, 0.1, 0.5, 1.0, 2.0],
+            'fit_prior': [True, False]
+        }
+        
+        nb_model = MultinomialNB()
+        grid_search = GridSearchCV(nb_model, param_grid, cv=5, scoring='f1_weighted')
+        grid_search.fit(X_train_vec, y_train)
+        
+        best_model = grid_search.best_estimator_
+        print(f"Best hyperparameters: {grid_search.best_params_}")
+        
+        # Evaluate the model
+        y_pred = best_model.predict(X_test_vec)
+        accuracy = accuracy_score(y_test, y_pred)
+        print(f"Test Accuracy: {accuracy:.4f}")
+        print(classification_report(y_test, y_pred))
+        
+        # Check class distribution in predictions
+        print("Prediction class distribution:")
+        unique, counts = np.unique(y_pred, return_counts=True)
+        for class_idx, count in zip(unique, counts):
+            print(f"Class {class_idx}: {count} predictions")
+        
+        # Save model components
+        model_data = {
+            'model': best_model,
+            'vectorizer': vectorizer,
+            'label_encoder': preprocessor.label_encoder,
+            'metrics': {
+                'accuracy': accuracy,
+                'best_params': grid_search.best_params_
+            }
+        }
+        
+        # Save the trained model
+        save_path = os.path.join(MODEL_DIR, 'naive_bayes_model.pkl')
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)  # Ensure directory exists
+        with open(save_path, 'wb') as f:
+            pickle.dump(model_data, f)
+        
+        print(f"Naive Bayes model saved at: {save_path}")
+        
+        # Store in the instance for later use
+        self.naive_bayes_model = model_data
+        
+        return model_data
 
     def train_bayesian_network(self, text_column, label_column, k_features=90):
         """

@@ -1,14 +1,20 @@
 # src/models/predict_model.py
 import os
+import re
+import string
 import pickle
 import numpy as np
 import pandas as pd
-
 from pathlib import Path
+
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from nltk.stem import WordNetLemmatizer
 from pgmpy.inference import VariableElimination
 from tensorflow.keras.preprocessing.sequence import pad_sequences # type: ignore
 
 from src.config import *
+from src.data.preprocess import DataPreprocessor
 
 class ModelPredictor:
     """
@@ -30,6 +36,7 @@ class ModelPredictor:
         # Use the trained decision tree model from the ModelTrainer instance to predict labels.
         predictions = model_trainer.decision_tree_model.predict(X_test)
         return predictions
+    
 
     def predict_neural_network(self, headlines, model_path=None, custom_threshold=0.35):
         """
@@ -135,12 +142,111 @@ class ModelPredictor:
             import traceback
             traceback.print_exc()
             return None
+        
 
-    def predict_naive_bayes(self):
+    def predict_naive_bayes(self, headlines, model_trainer=None, model_path=None):
         """
         Makes predictions using the trained Naive Bayes model.
+        
+        Args:
+            headlines: A string or list of strings containing news headlines to predict
+            model_trainer: Optional ModelTrainer instance with trained naive_bayes_model
+            model_path: Optional path to a specific model file
+            
+        Returns:
+            A list of dictionaries containing headline, predicted sentiment, and probabilities
         """
-        pass
+        # Convert single headline to list for consistent processing
+        if isinstance(headlines, str):
+            headlines = [headlines]
+        
+        # Get model data - either from trainer, specific path, or default path
+        model_data = None
+        
+        if model_trainer is not None and hasattr(model_trainer, 'naive_bayes_model'):
+            model_data = model_trainer.naive_bayes_model
+            print("Using Naive Bayes model from model_trainer")
+        elif model_path is not None:
+            try:
+                with open(model_path, 'rb') as f:
+                    model_data = pickle.load(f)
+                print(f"Loaded Naive Bayes model from {model_path}")
+            except Exception as e:
+                print(f"Error loading model from {model_path}: {str(e)}")
+        else:
+            # Try default path
+            default_path = os.path.join(MODEL_DIR, 'naive_bayes_model.pkl')
+            try:
+                with open(default_path, 'rb') as f:
+                    model_data = pickle.load(f)
+                print(f"Loaded Naive Bayes model from default path: {default_path}")
+            except FileNotFoundError:
+                print(f"No model found at {default_path}. Training a new model...")
+                # Train a new model if none exists
+                from src.models.train_model import ModelTrainer
+                from src.config import PROCESSED_DATA_PATH
+                
+                default_data_path = os.path.join(PROCESSED_DATA_PATH, "processed_dataset.csv")
+                preprocessor = DataPreprocessor(default_data_path)
+                preprocessor.clean_data()
+                preprocessor.split_data()
+                
+                trainer = ModelTrainer()
+                model_data = trainer.train_naive_bayes(preprocessor=preprocessor)
+        
+        # Now make predictions
+        if model_data is None:
+            print("Failed to load or train a Naive Bayes model.")
+            return None
+        
+        # Extract components
+        model = model_data['model']
+        vectorizer = model_data['vectorizer']
+        label_encoder = model_data['label_encoder']
+        
+        # Clean headlines using the same preprocessing steps
+        lemmatizer = WordNetLemmatizer()
+        stop_words = set(stopwords.words("english"))
+        
+        def clean_text(text):
+            text = text.lower()
+            text = re.sub(r'\d+', '', text)
+            text = text.translate(str.maketrans("", "", string.punctuation))
+            tokens = word_tokenize(text)
+            tokens = [lemmatizer.lemmatize(token) for token in tokens if token not in stop_words]
+            return " ".join(tokens)
+        
+        cleaned_headlines = [clean_text(headline) for headline in headlines]
+        
+        # Transform headlines to TF-IDF vectors using the saved vectorizer
+        X_headlines = vectorizer.transform(cleaned_headlines)
+        
+        # Get predictions and probabilities
+        y_pred = model.predict(X_headlines)
+        y_pred_proba = model.predict_proba(X_headlines)
+        
+        # Build result dictionaries
+        results = []
+        for i, headline in enumerate(headlines):
+            pred_class_idx = y_pred[i]
+            sentiment = label_encoder.inverse_transform([pred_class_idx])[0]
+            
+            # Create probability dictionary for each class
+            prob_dict = {
+                label_encoder.inverse_transform([j])[0]: float(prob)
+                for j, prob in enumerate(y_pred_proba[i])
+            }
+            
+            result = {
+                'headline': headline,
+                'sentiment': sentiment,
+                'confidence': float(y_pred_proba[i][pred_class_idx]),
+                'probabilities': prob_dict
+            }
+            results.append(result)
+        
+        return results
+
 
     def predict_bayesian_network(self, test_text_data, model_trainer):
         """
@@ -181,6 +287,7 @@ class ModelPredictor:
             
         return predictions
     
+
     def predict_bayesian_network_W2V(self, test_text_data, model_trainer):
         """
         Predicts labels using the trained Bayesian Network and word2vec-based sentence embeddings.
@@ -296,5 +403,3 @@ class ModelPredictor:
                 predictions.append(most_common_sentiment)
         
         return np.array(predictions)
-    
-

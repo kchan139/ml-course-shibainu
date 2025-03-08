@@ -31,13 +31,15 @@ class ModelPredictor:
         predictions = model_trainer.decision_tree_model.predict(X_test)
         return predictions
 
-    def predict_neural_network(self, headlines, model_path=None):
+    def predict_neural_network(self, headlines, model_path=None, custom_threshold=0.35):
         """
-        Makes predictions using the trained Neural Network model.
+        Makes predictions using the trained Neural Network model with custom thresholding
+        to better handle class imbalance.
         
         Args:
             headlines: A string or list of strings containing news headlines to predict
             model_path: Optional path to a specific model file. If None, uses the most recent model.
+            custom_threshold: Confidence threshold for class prediction (default: 0.35)
             
         Returns:
             A list of dictionaries containing the original headline, predicted sentiment, 
@@ -50,10 +52,10 @@ class ModelPredictor:
         # Find the most recent model if no path is provided
         if model_path is None:
             model_dir = Path(MODEL_DIR)
-            models = list(model_dir.glob('neural_network_*.pkl'))
+            models = list(model_dir.glob('*rnn_*.pkl'))
             if not models:
                 model_dir = Path(EXPERIMENT_DIR)
-                models = list(model_dir.glob('neural_network_*.pkl'))
+                models = list(model_dir.glob('*rnn_*.pkl'))
             if not models:
                 print(f"No models found in {model_dir}")
                 return None
@@ -73,18 +75,39 @@ class ModelPredictor:
             label_encoder = model_data['label_encoder']
             max_len = model_data.get('max_len', 100)  # Default to 100 if not specified
             
+            # Use saved threshold if available, otherwise use the provided one
+            threshold = model_data.get('custom_threshold', custom_threshold)
+            
             # Process the headlines
             sequences = tokenizer.texts_to_sequences(headlines)
-            padded_sequences = pad_sequences(sequences, maxlen=max_len)
+            padded_sequences = pad_sequences(sequences, maxlen=max_len, padding='post')
             
-            # Generate predictions
+            # Generate raw prediction probabilities
             prediction_probs = model.predict(padded_sequences)
             
-            # Process results
+            # Process results with custom threshold logic
             results = []
+            class_distribution = {0: 0, 1: 0, 2: 0}  # Track prediction distribution
+            
             for i, headline in enumerate(headlines):
                 probs = prediction_probs[i]
-                predicted_class_idx = np.argmax(probs)
+                
+                # Apply custom threshold logic to combat class imbalance
+                # If no class exceeds threshold, pick highest probability
+                if not any(p > threshold for p in probs):
+                    predicted_class_idx = np.argmax(probs)
+                # Otherwise use custom logic to favor minority classes
+                elif probs[0] > threshold*0.8:  # Lower threshold for negative class
+                    predicted_class_idx = 0
+                elif probs[2] > threshold*0.8:  # Lower threshold for positive class
+                    predicted_class_idx = 2
+                else:
+                    predicted_class_idx = np.argmax(probs)
+                
+                # Update class distribution counter
+                if predicted_class_idx in class_distribution:
+                    class_distribution[predicted_class_idx] += 1
+                    
                 predicted_sentiment = label_encoder.inverse_transform([predicted_class_idx])[0]
                 
                 # Create result dictionary
@@ -99,10 +122,18 @@ class ModelPredictor:
                 }
                 results.append(result)
             
+            # Print class distribution for monitoring
+            print("Prediction class distribution:")
+            for class_idx, count in class_distribution.items():
+                sentiment = label_encoder.inverse_transform([class_idx])[0]
+                print(f"{sentiment} (class {class_idx}): {count} predictions")
+            
             return results
-                
+            
         except Exception as e:
-            print(f"Error in predict_neural_network: {e}")
+            print(f"Error predicting with neural network: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def predict_naive_bayes(self):
@@ -149,6 +180,56 @@ class ModelPredictor:
             predictions.append(predicted_label)
             
         return predictions
+    
+    def predict_bayesian_network_W2V(self, test_text_data, model_trainer):
+        """
+        Predicts labels using the trained Bayesian Network and word2vec-based sentence embeddings.
+
+        Args:
+            test_text_data: List/Series of cleaned text strings.
+            model_trainer: A ModelTrainer instance with:
+                - trained_model (BayesianNetwork)
+                - w2v_model (Word2Vec)
+                - discretizer (KBinsDiscretizer)
+
+        Returns:
+            List of predicted labels.
+        """
+
+        # Helper function: Compute average word embeddings
+        def sentence_embedding(sentence, model):
+            words = sentence.split()
+            vectors = [model.wv[word] for word in words if word in model.wv]
+            return np.mean(vectors, axis=0) if vectors else np.zeros(model.vector_size)
+
+        # Convert test text into embeddings
+        X_w2v_test = np.array([sentence_embedding(text, model_trainer.w2v_model) for text in test_text_data])
+
+        # Discretize using the trained discretizer
+        X_discrete_test = model_trainer.discretizer.transform(X_w2v_test)
+
+        # Clip values to avoid unseen bin numbers
+        X_discrete_test = np.clip(X_discrete_test, 0, model_trainer.discretizer.n_bins_[0] - 1)
+
+        # Create a DataFrame
+        feature_names = [f"feat_{i}" for i in range(X_discrete_test.shape[1])]
+        df_test = pd.DataFrame(X_discrete_test, columns=feature_names)
+
+        # Ensure only features that exist in the trained Bayesian Network are used
+        model_nodes = list(model_trainer.trained_model.nodes())  # Convert to list
+        valid_columns = list(set(model_nodes) & set(df_test.columns))  # Select only matching columns
+        df_test = df_test[valid_columns]
+
+        # Perform inference
+        infer = VariableElimination(model_trainer.trained_model)
+        predictions = []
+        for _, row in df_test.iterrows():
+            evidence = {col: int(row[col]) for col in df_test.columns}
+            query_result = infer.query(variables=["label"], evidence=evidence)
+            predictions.append(query_result.values.argmax())
+
+        return predictions
+
 
     def predict_hidden_markov_model(self, test_data, model_trainer=None, model_path=None):
         """

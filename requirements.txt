@@ -1,5 +1,5 @@
 pandas
-numpy 
+numpy<2.0,>=1.26.0
 scikit-learn
 torch
 transformers[torch]
@@ -14,3 +14,4 @@ datasets
 tf-keras
 hmmlearn
 accelerate>=0.26.0
+gensim

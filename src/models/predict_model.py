@@ -142,91 +142,146 @@ class ModelPredictor:
         """
         pass
 
-    def predict_bayesian_network(self, test_text_data, model_trainer):
+    def predict_bayesian_network(self, test_text_data, model_trainer=None, model_path=None):
         """
         Args:
-            test_text_data: Iterable (list, Series) of cleaned text strings.
-            model_trainer: An instance of ModelTrainer that has the following attributes:
-                - trained_model: The trained BayesianNetwork.
-                - cv: The fitted CountVectorizer.
-                - selector: The fitted SelectKBest object.
-                - selected_features: List of selected feature names.
-                
+            test_text_data (iterable): Cleaned text strings to predict on.
+            model_trainer (object, optional): Instance of ModelTrainer with
+                - trained_model
+                - count_vectorizer (cv)
+                - selector
+                - selected_features
+              Defaults to None.
+            model_path (str, optional): Path to the file containing all artifacts (model, vectorizer, selector, features).
+              Defaults to None.
+        
         Returns:
-            A list of predicted labels.
+            list: Predicted labels for each text in 'test_text_data'.
         """
-        # Transform the test text using the fitted CountVectorizer
-        X_counts_test = model_trainer.cv.transform(test_text_data)
 
-        # Apply the same feature selection as during training
-        X_selected_test = model_trainer.selector.transform(X_counts_test)
+        # 1) Determine how to load artifacts
+        if model_trainer is not None:
+            # Use artifacts in memory from model_trainer
+            trained_model = model_trainer.trained_model
+            cv = model_trainer.cv
+            selector = model_trainer.selector
+            selected_features = model_trainer.selected_features
+
+        else:
+            # If model_trainer is None, check model_path
+            if model_path is None:
+                model_path = os.path.join(MODEL_DIR, 'bayesian_network_model.pkl')  
+
+            # Load artifacts from file
+            with open(model_path, 'rb') as f:
+                artifacts = pickle.load(f)
+            trained_model = artifacts['trained_model']
+            cv = artifacts['count_vectorizer']
+            selector = artifacts['selector']
+            selected_features = artifacts['selected_features']
+
+        # 2) Transform test_text_data into features
+        # Transform the test text using the fitted CountVectorizer
+        X_counts_test = cv.transform(test_text_data)
+
+        # Apply the same feature selection
+        X_selected_test = selector.transform(X_counts_test)
+
+        # Convert to binary presence/absence (as in your original code)
         X_features_test = (X_selected_test > 0).astype(int)
 
         # Create a DataFrame with the selected feature names
-        df_test = pd.DataFrame(X_features_test.toarray(), columns=model_trainer.selected_features)
-        
-        # Initialize the inference engine using the trained Bayesian network model.
-        infer = VariableElimination(model_trainer.trained_model)
+        df_test = pd.DataFrame(X_features_test.toarray(), columns=selected_features)
+
+        # 3) Perform inference using the trained model
+        infer = VariableElimination(trained_model)
         predictions = []
+
         for _, row in df_test.iterrows():
             # Build the evidence dictionary from the row (convert values to int)
             evidence = {col: int(row[col]) for col in df_test.columns}
 
-            # Query the network for the 'label' variable.
+            # Query the network for the 'label' variable
             query_result = infer.query(variables=["label"], evidence=evidence)
-            
-            # Pick the label with the highest probability.
+
+            # Pick the label with the highest probability
             predicted_label = query_result.values.argmax()
             predictions.append(predicted_label)
-            
+
         return predictions
     
-    def predict_bayesian_network_W2V(self, test_text_data, model_trainer):
+    def predict_bayesian_network_W2V(self, test_text_data, model_trainer=None, model_path=None):
         """
         Predicts labels using the trained Bayesian Network and word2vec-based sentence embeddings.
-
         Args:
-            test_text_data: List/Series of cleaned text strings.
-            model_trainer: A ModelTrainer instance with:
+            test_text_data (list or Series of str): Cleaned text strings to predict on.
+            model_trainer (object, optional): Instance of ModelTrainer containing:
                 - trained_model (BayesianNetwork)
                 - w2v_model (Word2Vec)
                 - discretizer (KBinsDiscretizer)
+              Defaults to None.
+            model_path (str, optional): Path to the file containing all artifacts. Defaults to None.
 
         Returns:
-            List of predicted labels.
+            list: Predicted labels for each text in 'test_text_data'.
         """
 
-        # Helper function: Compute average word embeddings
+        # ----------------------------
+        # 1) Determine how to load artifacts
+        # ----------------------------
+        if model_trainer is not None:
+            # Use artifacts directly from model_trainer
+            trained_model = model_trainer.trained_model
+            w2v_model = model_trainer.w2v_model
+            discretizer = model_trainer.discretizer
+        else:
+            # If model_trainer is None, check model_path
+            if model_path is None:
+                # Use a default path
+                model_path = os.path.join(MODEL_DIR, 'bayesian_network_W2V.pkl')
+
+            # Load artifacts from the saved file
+            with open(model_path, 'rb') as f:
+                artifacts = pickle.load(f)
+
+            trained_model = artifacts['trained_model']
+            w2v_model = artifacts['word2vec_model']
+            discretizer = artifacts['discretizer']
+            # If you saved feature_names, you can load them here as well:
+            # feature_names = artifacts['feature_names']
+
+        # Helper function to compute the average word embeddings
         def sentence_embedding(sentence, model):
             words = sentence.split()
             vectors = [model.wv[word] for word in words if word in model.wv]
             return np.mean(vectors, axis=0) if vectors else np.zeros(model.vector_size)
 
         # Convert test text into embeddings
-        X_w2v_test = np.array([sentence_embedding(text, model_trainer.w2v_model) for text in test_text_data])
+        X_w2v_test = np.array([sentence_embedding(text, w2v_model) for text in test_text_data])
 
         # Discretize using the trained discretizer
-        X_discrete_test = model_trainer.discretizer.transform(X_w2v_test)
+        X_discrete_test = discretizer.transform(X_w2v_test)
 
         # Clip values to avoid unseen bin numbers
-        X_discrete_test = np.clip(X_discrete_test, 0, model_trainer.discretizer.n_bins_[0] - 1)
+        X_discrete_test = np.clip(X_discrete_test, 0, discretizer.n_bins_[0] - 1)
 
-        # Create a DataFrame
+        # Create a DataFrame for the discretized features
         feature_names = [f"feat_{i}" for i in range(X_discrete_test.shape[1])]
         df_test = pd.DataFrame(X_discrete_test, columns=feature_names)
 
         # Ensure only features that exist in the trained Bayesian Network are used
-        model_nodes = list(model_trainer.trained_model.nodes())  # Convert to list
-        valid_columns = list(set(model_nodes) & set(df_test.columns))  # Select only matching columns
+        model_nodes = list(trained_model.nodes())
+        valid_columns = list(set(model_nodes) & set(df_test.columns))
         df_test = df_test[valid_columns]
 
         # Perform inference
-        infer = VariableElimination(model_trainer.trained_model)
+        infer = VariableElimination(trained_model)
         predictions = []
         for _, row in df_test.iterrows():
             evidence = {col: int(row[col]) for col in df_test.columns}
             query_result = infer.query(variables=["label"], evidence=evidence)
-            predictions.append(query_result.values.argmax())
+            predicted_label = query_result.values.argmax()
+            predictions.append(predicted_label)
 
         return predictions
 

@@ -102,7 +102,7 @@ class ModelTrainer:
             preprocessor.split_data()
         
         if preprocessor is None:
-            default_path = os.path.join(PROCESSED_DATA_PATH, "processed_dataset.csv")
+            default_path = os.path.join(RAW_DATA_PATH, "all-data.csv")
             preprocessor = DataPreprocessor(default_path)
             preprocessor.clean_data()
             preprocessor.split_data()
@@ -141,13 +141,13 @@ class ModelTrainer:
             Embedding(max_words, embedding_dim),
             
             # Bidirectional LSTM for better context capture
-            Bidirectional(LSTM(32, return_sequences=True)),
+            Bidirectional(LSTM(64, return_sequences=True)),
             
             # Global max pooling to capture the most important features
             GlobalMaxPooling1D(),
             
             # Dropout for regularization
-            Dropout(0.3),
+            Dropout(0.4),
             
             # Hidden layer for better discrimination between classes
             Dense(64, activation='relu', kernel_regularizer=regularizers.l2(0.001)),
@@ -167,7 +167,7 @@ class ModelTrainer:
         # Add callbacks
         early_stopping = EarlyStopping(
             monitor='val_loss',
-            patience=5,
+            patience=4,
             restore_best_weights=True
         )
         
@@ -190,7 +190,7 @@ class ModelTrainer:
         )
         
         # Custom threshold function to prevent bias toward majority class
-        def custom_prediction(probs, threshold=0.3):
+        def custom_prediction(probs, threshold=0.4):
             predictions = []
             for prob in probs:
                 # If no class exceeds threshold, pick highest

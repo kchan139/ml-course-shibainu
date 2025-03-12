@@ -34,6 +34,8 @@ from src.data.preprocess import DataPreprocessor
 from gensim.models import Word2Vec
 from sklearn.preprocessing import KBinsDiscretizer
 import logging
+from pgmpy.estimators import K2Score
+import random
 
 
 class ModelTrainer:
@@ -334,15 +336,73 @@ class ModelTrainer:
         
         return model_data
 
-    def train_bayesian_network(self, text_column, label_column, k_features=90):
+    # def train_bayesian_network(self, text_column, label_column, k_features=90):
+    #     """
+    #     Trains a Bayesian network using features extracted from text, 
+    #     and saves all necessary artifacts (model, vectorizer, selector, selected features) in one file.
+        
+    #     Args:
+    #         text_column: The list (or Series) containing the cleaned text.
+    #         label_column: The list (or Series) containing the labels.
+    #         k_features: Number of top n-gram features to select.
+        
+    #     Returns:
+    #         A trained BayesianNetwork instance.
+    #     """
+    #     # 1. Build the CountVectorizer and get the n-gram counts
+    #     self.cv = CountVectorizer(ngram_range=(1, 2), stop_words='english')
+    #     X_counts = self.cv.fit_transform(text_column)
+
+    #     # 2. Select top k n-grams using a chi-square test
+    #     y = label_column
+    #     self.selector = SelectKBest(chi2, k=k_features)
+    #     X_selected = self.selector.fit_transform(X_counts, y)
+
+    #     # Retrieve the selected feature indices and names
+    #     selected_indices = self.selector.get_support(indices=True)
+    #     self.selected_features = [self.cv.get_feature_names_out()[i] for i in selected_indices]
+
+    #     # 3. Build a feature DataFrame
+    #     # Convert the selected features into binary presence/absence
+    #     X_features = (X_selected > 0).astype(int)
+    #     df_features = pd.DataFrame(X_features.toarray(), columns=self.selected_features)
+    #     df_features['label'] = y.values
+
+    #     # 4. Learn the Bayesian Network structure and parameters
+    #     hc = HillClimbSearch(df_features)
+    #     best_structure = hc.estimate(scoring_method=BicScore(df_features))
+    #     self.trained_model = BayesianNetwork(best_structure.edges())
+    #     self.trained_model.fit(df_features, estimator=BayesianEstimator, prior_type='BDeu')
+
+    #     # 5. Save everything in one file:
+    #     #    - Bayesian network model
+    #     #    - CountVectorizer
+    #     #    - SelectKBest
+    #     #    - Selected feature names
+    #     artifacts = {
+    #         'trained_model': self.trained_model,
+    #         'count_vectorizer': self.cv,
+    #         'selector': self.selector,
+    #         'selected_features': self.selected_features
+    #     }
+
+    #     save_path = os.path.join(MODEL_DIR, 'bayesian_network_model.pkl')
+    #     with open(save_path, 'wb') as f:
+    #         pickle.dump(artifacts, f)
+
+    #     return self.trained_model
+
+    def train_bayesian_network(self, text_column, label_column, k_features=30, 
+                            population_size=50, generations=30):
         """
-        Trains a Bayesian network using features extracted from text, 
-        and saves all necessary artifacts (model, vectorizer, selector, selected features) in one file.
+        Trains a Bayesian network using genetic algorithm for structure learning.
         
         Args:
             text_column: The list (or Series) containing the cleaned text.
             label_column: The list (or Series) containing the labels.
             k_features: Number of top n-gram features to select.
+            population_size: Size of the genetic algorithm population.
+            generations: Number of generations to evolve.
         
         Returns:
             A trained BayesianNetwork instance.
@@ -351,32 +411,111 @@ class ModelTrainer:
         self.cv = CountVectorizer(ngram_range=(1, 2), stop_words='english')
         X_counts = self.cv.fit_transform(text_column)
 
-        # 2. Select top k n-grams using a chi-square test
+        # 2. Select top k n-grams using chi-square test
         y = label_column
         self.selector = SelectKBest(chi2, k=k_features)
         X_selected = self.selector.fit_transform(X_counts, y)
 
-        # Retrieve the selected feature indices and names
         selected_indices = self.selector.get_support(indices=True)
         self.selected_features = [self.cv.get_feature_names_out()[i] for i in selected_indices]
 
-        # 3. Build a feature DataFrame
-        # Convert the selected features into binary presence/absence
+        # 3. Build feature DataFrame with named columns
         X_features = (X_selected > 0).astype(int)
         df_features = pd.DataFrame(X_features.toarray(), columns=self.selected_features)
         df_features['label'] = y.values
+        
+        # Create state names dictionary for all features
+        state_names = {}
+        for column in df_features.columns:
+            state_names[column] = [0, 1]  # Binary states for features
+        state_names['label'] = sorted(df_features['label'].unique())
 
-        # 4. Learn the Bayesian Network structure and parameters
-        hc = HillClimbSearch(df_features)
-        best_structure = hc.estimate(scoring_method=BicScore(df_features))
-        self.trained_model = BayesianNetwork(best_structure.edges())
-        self.trained_model.fit(df_features, estimator=BayesianEstimator, prior_type='BDeu')
+        # 4. Implement genetic algorithm for structure learning
+        def create_random_dag(n_nodes):
+            """Create a random directed acyclic graph"""
+            edges = []
+            for i in range(n_nodes):
+                for j in range(i + 1, n_nodes):
+                    if random.random() < 0.3:  # 30% chance of edge
+                        edges.append((i, j))
+            return edges
 
-        # 5. Save everything in one file:
-        #    - Bayesian network model
-        #    - CountVectorizer
-        #    - SelectKBest
-        #    - Selected feature names
+        def mutate(edges, mutation_rate=0.1):
+            """Mutate the graph structure"""
+            n_nodes = max(max(edge) for edge in edges) + 1
+            new_edges = edges.copy()
+            
+            for i in range(n_nodes):
+                for j in range(i + 1, n_nodes):
+                    if random.random() < mutation_rate:
+                        edge = (i, j)
+                        if edge in new_edges:
+                            new_edges.remove(edge)
+                        else:
+                            new_edges.append(edge)
+            return new_edges
+
+        def crossover(parent1, parent2):
+            """Perform crossover between two parent structures"""
+            child_edges = []
+            all_edges = list(set(parent1 + parent2))
+            
+            for edge in all_edges:
+                if random.random() < 0.5:
+                    child_edges.append(edge)
+            return child_edges
+
+        # Initialize population
+        n_nodes = len(df_features.columns)
+        population = [create_random_dag(n_nodes) for _ in range(population_size)]
+        scoring_fn = K2Score(df_features)
+
+        # Evolve population
+        for gen in range(generations):
+            # Evaluate fitness
+            fitness_scores = []
+            for edges in population:
+                try:
+                    model = BayesianNetwork(edges)
+                    score = scoring_fn.score(model)
+                    fitness_scores.append(score)
+                except:
+                    fitness_scores.append(float('-inf'))
+
+            # Select parents
+            parent_indices = np.argsort(fitness_scores)[-population_size//2:]
+            parents = [population[i] for i in parent_indices]
+
+            # Create new population
+            new_population = parents.copy()
+            while len(new_population) < population_size:
+                parent1, parent2 = random.sample(parents, 2)
+                child = crossover(parent1, parent2)
+                child = mutate(child)
+                new_population.append(child)
+
+            population = new_population
+
+        # After getting best structure, create and fit model with state names
+        best_structure_idx = np.argmax(fitness_scores)
+        best_edges = population[best_structure_idx]
+        
+        # Create named edges using feature names
+        named_edges = []
+        feature_names = list(df_features.columns)
+        for i, j in best_edges:
+            named_edges.append((feature_names[i], feature_names[j]))
+        
+        # Train final model with named nodes
+        self.trained_model = BayesianNetwork(named_edges)
+        self.trained_model.fit(
+            df_features, 
+            estimator=BayesianEstimator, 
+            state_names=state_names,
+            prior_type='BDeu'
+        )
+
+        # 6. Save artifacts
         artifacts = {
             'trained_model': self.trained_model,
             'count_vectorizer': self.cv,

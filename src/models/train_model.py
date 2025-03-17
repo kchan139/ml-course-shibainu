@@ -265,7 +265,7 @@ class ModelTrainer:
             preprocessor.split_data()
         
         if preprocessor is None:
-            default_path = os.path.join(PROCESSED_DATA_PATH, "processed_dataset.csv")
+            default_path = os.path.join(RAW_DATA_PATH, "all-data.csv")
             preprocessor = DataPreprocessor(default_path)
             preprocessor.clean_data()
             preprocessor.split_data()

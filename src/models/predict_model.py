@@ -176,9 +176,8 @@ class ModelPredictor:
                 print(f"No model found at {default_path}. Training a new model...")
                 # Train a new model if none exists
                 from src.models.train_model import ModelTrainer
-                from src.config import PROCESSED_DATA_PATH
                 
-                default_data_path = os.path.join(PROCESSED_DATA_PATH, "processed_dataset.csv")
+                default_data_path = os.path.join(RAW_DATA_PATH, "all-data.csv")
                 preprocessor = DataPreprocessor(default_data_path)
                 preprocessor.clean_data()
                 preprocessor.split_data()

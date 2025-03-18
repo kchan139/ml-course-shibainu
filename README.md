@@ -169,58 +169,59 @@ Our models demonstrated varying performance characteristics on the test dataset:
 
 #### Neural Network (RNN)
 
-|precision|recall|f1-score|support|
-|---|---|---|---|---|
-|Class 0|0.94|0.88|0.91|600|
-|Class 1|0.77|0.89|0.83|618|
-|Class 2|0.88|0.79|0.83|600|
-|accuracy|||0.85|1818|
-|macro avg|0.86|0.85|0.85|1818|
-|weighted avg|0.86|0.85|0.85|1818|
+|              | precision | recall | f1-score |
+| ------------ | --------- | ------ | -------- |
+| Class 0      | 0.94      | 0.88   | 0.91     |
+| Class 1      | 0.77      | 0.89   | 0.83     |
+| Class 2      | 0.88      | 0.79   | 0.83     |
+| accuracy     |           |        | 0.85     |
+| macro avg    | 0.86      | 0.85   | 0.85     |
+| weighted avg | 0.86      | 0.85   | 0.85     |
 
 #### Naive Bayes
 
-|precision|recall|f1-score|support|
-|---|---|---|---|---|
-|Class 0|0.92|0.88|0.90|600|
-|Class 1|0.73|0.93|0.82|618|
-|Class 2|0.92|0.72|0.81|600|
-|accuracy|||0.84|1818|
-|macro avg|0.86|0.84|0.84|1818|
-|weighted avg|0.86|0.84|0.84|1818|
+|              | precision | recall | f1-score |
+| ------------ | --------- | ------ | -------- |
+| Class 0      | 0.92      | 0.88   | 0.90     |
+| Class 1      | 0.73      | 0.93   | 0.82     |
+| Class 2      | 0.92      | 0.72   | 0.81     |
+| accuracy     |           |        | 0.84     |
+| macro avg    | 0.86      | 0.84   | 0.84     |
+| weighted avg | 0.86      | 0.84   | 0.84     |
 
 #### Decision Tree
 
-|precision|recall|f1-score|support|
-|---|---|---|---|---|
-|Class 0|0.94|0.83|0.88|600|
-|Class 1|0.69|0.94|0.80|618|
-|Class 2|0.90|0.68|0.78|600|
-|accuracy|||0.82|1818|
-|macro avg|0.85|0.82|0.82|1818|
-|weighted avg|0.84|0.82|0.82|1818|
+|              | precision | recall | f1-score |
+| ------------ | --------- | ------ | -------- |
+| Class 0      | 0.94      | 0.83   | 0.88     |
+| Class 1      | 0.69      | 0.94   | 0.80     |
+| Class 2      | 0.90      | 0.68   | 0.78     |
+| accuracy     |           |        | 0.82     |
+| macro avg    | 0.85      | 0.82   | 0.82     |
+| weighted avg | 0.84      | 0.82   | 0.82     |
 
 #### Bayesian Network
 
-|precision|recall|f1-score|support|
-|---|---|---|---|---|
-|Class 0|0.95|0.73|0.83|600|
-|Class 1|0.61|0.90|0.73|618|
-|Class 2|0.83|0.62|0.71|600|
-|accuracy|||0.75|1818|
-|macro avg|0.80|0.75|0.75|1818|
-|weighted avg|0.80|0.75|0.75|1818|
+|              | precision | recall | f1-score |
+| ------------ | --------- | ------ | -------- |
+| Class 0      | 0.95      | 0.73   | 0.83     |
+| Class 1      | 0.61      | 0.90   | 0.73     |
+| Class 2      | 0.83      | 0.62   | 0.71     |
+| accuracy     |           |        | 0.75     |
+| macro avg    | 0.80      | 0.75   | 0.75     |
+| weighted avg | 0.80      | 0.75   | 0.75     |
 
 #### Hidden Markov Model
 
-|precision|recall|f1-score|support|
-|---|---|---|---|---|
-|Class 0|0.42|0.02|0.04|600|
-|Class 1|0.00|0.00|0.00|618|
-|Class 2|0.33|0.97|0.49|600|
-|accuracy|||0.33|1818|
-|macro avg|0.25|0.33|0.18|1818|
-|weighted avg|0.25|0.33|0.18|1818|
+|              | precision | recall | f1-score |
+| ------------ | --------- | ------ | -------- |
+| Class 0      | 0.42      | 0.02   | 0.04     |
+| Class 1      | 0.00      | 0.00   | 0.00     |
+| Class 2      | 0.33      | 0.97   | 0.49     |
+| accuracy     |           |        | 0.33     |
+| macro avg    | 0.25      | 0.33   | 0.18     |
+| weighted avg | 0.25      | 0.33   | 0.18     |
+
 
 ### Comparative Analysis
 

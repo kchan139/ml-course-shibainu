@@ -1,5 +1,5 @@
 # src/data/preprocess.py
-
+import os
 import re
 import string
 from pathlib import Path
@@ -16,7 +16,7 @@ from nltk.stem import WordNetLemmatizer
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import LabelEncoder
-from src.config import RAW_DATA_PATH, PROCESSED_DATA_PATH  # Import paths from config.py
+from src.config import *  # Import paths from config.py
 
 class DataPreprocessor:
     """
@@ -33,7 +33,9 @@ class DataPreprocessor:
             file_path: Path to the 'all-data.csv' file.
         """
         self.file_path = file_path
-        self.df = pd.read_csv(file_path, encoding="UTF-8")
+        if self.file_path == "":
+            self.file_path = os.path.join(RAW_DATA_PATH, 'all-data.csv')
+        self.df = pd.read_csv(self.file_path, encoding="UTF-8")
         # Remove extra spaces from column names for consistency
         self.df.rename(columns=lambda x: x.strip(), inplace=True)
         self.label_encoder = LabelEncoder()

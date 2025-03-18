@@ -1,14 +1,20 @@
 # src/models/predict_model.py
 import os
+import re
+import string
 import pickle
 import numpy as np
 import pandas as pd
-
 from pathlib import Path
+
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from nltk.stem import WordNetLemmatizer
 from pgmpy.inference import VariableElimination
 from tensorflow.keras.preprocessing.sequence import pad_sequences # type: ignore
 
 from src.config import *
+from src.data.preprocess import DataPreprocessor
 
 class ModelPredictor:
     """
@@ -30,6 +36,7 @@ class ModelPredictor:
         # Use the trained decision tree model from the ModelTrainer instance to predict labels.
         predictions = model_trainer.decision_tree_model.predict(X_test)
         return predictions
+    
 
     def predict_neural_network(self, headlines, model_path=None, custom_threshold=0.35):
         """
@@ -85,24 +92,15 @@ class ModelPredictor:
             # Generate raw prediction probabilities
             prediction_probs = model.predict(padded_sequences)
             
-            # Process results with custom threshold logic
+            # Process results without custom threshold logic
             results = []
             class_distribution = {0: 0, 1: 0, 2: 0}  # Track prediction distribution
-            
+
             for i, headline in enumerate(headlines):
                 probs = prediction_probs[i]
                 
-                # Apply custom threshold logic to combat class imbalance
-                # If no class exceeds threshold, pick highest probability
-                if not any(p > threshold for p in probs):
-                    predicted_class_idx = np.argmax(probs)
-                # Otherwise use custom logic to favor minority classes
-                elif probs[0] > threshold*0.8:  # Lower threshold for negative class
-                    predicted_class_idx = 0
-                elif probs[2] > threshold*0.8:  # Lower threshold for positive class
-                    predicted_class_idx = 2
-                else:
-                    predicted_class_idx = np.argmax(probs)
+                # Predict class based on highest probability only (no thresholds)
+                predicted_class_idx = np.argmax(probs)
                 
                 # Update class distribution counter
                 if predicted_class_idx in class_distribution:
@@ -121,12 +119,13 @@ class ModelPredictor:
                     }
                 }
                 results.append(result)
-            
+
             # Print class distribution for monitoring
             print("Prediction class distribution:")
             for class_idx, count in class_distribution.items():
                 sentiment = label_encoder.inverse_transform([class_idx])[0]
                 print(f"{sentiment} (class {class_idx}): {count} predictions")
+
             
             return results
             
@@ -135,98 +134,251 @@ class ModelPredictor:
             import traceback
             traceback.print_exc()
             return None
+        
 
-    def predict_naive_bayes(self):
+    def predict_naive_bayes(self, headlines, model_trainer=None, model_path=None):
         """
         Makes predictions using the trained Naive Bayes model.
+        
+        Args:
+            headlines: A string or list of strings containing news headlines to predict
+            model_trainer: Optional ModelTrainer instance with trained naive_bayes_model
+            model_path: Optional path to a specific model file
+            
+        Returns:
+            A list of dictionaries containing headline, predicted sentiment, and probabilities
         """
-        pass
+        # Convert single headline to list for consistent processing
+        if isinstance(headlines, str):
+            headlines = [headlines]
+        
+        # Get model data - either from trainer, specific path, or default path
+        model_data = None
+        
+        if model_trainer is not None and hasattr(model_trainer, 'naive_bayes_model'):
+            model_data = model_trainer.naive_bayes_model
+            print("Using Naive Bayes model from model_trainer")
+        elif model_path is not None:
+            try:
+                with open(model_path, 'rb') as f:
+                    model_data = pickle.load(f)
+                print(f"Loaded Naive Bayes model from {model_path}")
+            except Exception as e:
+                print(f"Error loading model from {model_path}: {str(e)}")
+        else:
+            # Try default path
+            default_path = os.path.join(MODEL_DIR, 'naive_bayes_model.pkl')
+            try:
+                with open(default_path, 'rb') as f:
+                    model_data = pickle.load(f)
+                print(f"Loaded Naive Bayes model from default path: {default_path}")
+            except FileNotFoundError:
+                print(f"No model found at {default_path}. Training a new model...")
+                # Train a new model if none exists
+                from src.models.train_model import ModelTrainer
+                
+                default_data_path = os.path.join(RAW_DATA_PATH, "all-data.csv")
+                preprocessor = DataPreprocessor(default_data_path)
+                preprocessor.clean_data()
+                preprocessor.split_data()
+                
+                trainer = ModelTrainer()
+                model_data = trainer.train_naive_bayes(preprocessor=preprocessor)
+        
+        # Now make predictions
+        if model_data is None:
+            print("Failed to load or train a Naive Bayes model.")
+            return None
+        
+        # Extract components
+        model = model_data['model']
+        vectorizer = model_data['vectorizer']
+        label_encoder = model_data['label_encoder']
+        
+        # Clean headlines using the same preprocessing steps
+        lemmatizer = WordNetLemmatizer()
+        stop_words = set(stopwords.words("english"))
+        
+        def clean_text(text):
+            text = text.lower()
+            text = re.sub(r'\d+', '', text)
+            text = text.translate(str.maketrans("", "", string.punctuation))
+            tokens = word_tokenize(text)
+            tokens = [lemmatizer.lemmatize(token) for token in tokens if token not in stop_words]
+            return " ".join(tokens)
+        
+        cleaned_headlines = [clean_text(headline) for headline in headlines]
+        
+        # Transform headlines to TF-IDF vectors using the saved vectorizer
+        X_headlines = vectorizer.transform(cleaned_headlines)
+        
+        # Get predictions and probabilities
+        y_pred = model.predict(X_headlines)
+        y_pred_proba = model.predict_proba(X_headlines)
+        
+        # Build result dictionaries
+        results = []
+        for i, headline in enumerate(headlines):
+            pred_class_idx = y_pred[i]
+            sentiment = label_encoder.inverse_transform([pred_class_idx])[0]
+            
+            # Create probability dictionary for each class
+            prob_dict = {
+                label_encoder.inverse_transform([j])[0]: float(prob)
+                for j, prob in enumerate(y_pred_proba[i])
+            }
+            
+            result = {
+                'headline': headline,
+                'sentiment': sentiment,
+                'confidence': float(y_pred_proba[i][pred_class_idx]),
+                'probabilities': prob_dict
+            }
+            results.append(result)
+        
+        return results
 
-    def predict_bayesian_network(self, test_text_data, model_trainer):
+
+    def predict_bayesian_network(self, test_text_data, model_trainer=None, model_path=None):
         """
         Args:
-            test_text_data: Iterable (list, Series) of cleaned text strings.
-            model_trainer: An instance of ModelTrainer that has the following attributes:
-                - trained_model: The trained BayesianNetwork.
-                - cv: The fitted CountVectorizer.
-                - selector: The fitted SelectKBest object.
-                - selected_features: List of selected feature names.
-                
+            test_text_data (iterable): Cleaned text strings to predict on.
+            model_trainer (object, optional): Instance of ModelTrainer with
+                - trained_model
+                - count_vectorizer (cv)
+                - selector
+                - selected_features
+              Defaults to None.
+            model_path (str, optional): Path to the file containing all artifacts (model, vectorizer, selector, features).
+              Defaults to None.
+        
         Returns:
-            A list of predicted labels.
+            list: Predicted labels for each text in 'test_text_data'.
         """
-        # Transform the test text using the fitted CountVectorizer
-        X_counts_test = model_trainer.cv.transform(test_text_data)
 
-        # Apply the same feature selection as during training
-        X_selected_test = model_trainer.selector.transform(X_counts_test)
+        # 1) Determine how to load artifacts
+        if model_trainer is not None:
+            # Use artifacts in memory from model_trainer
+            trained_model = model_trainer.trained_model
+            cv = model_trainer.cv
+            selector = model_trainer.selector
+            selected_features = model_trainer.selected_features
+
+        else:
+            # If model_trainer is None, check model_path
+            if model_path is None:
+                model_path = os.path.join(MODEL_DIR, 'bayesian_network_model.pkl')  
+
+            # Load artifacts from file
+            with open(model_path, 'rb') as f:
+                artifacts = pickle.load(f)
+            trained_model = artifacts['trained_model']
+            cv = artifacts['count_vectorizer']
+            selector = artifacts['selector']
+            selected_features = artifacts['selected_features']
+
+        # 2) Transform test_text_data into features
+        # Transform the test text using the fitted CountVectorizer
+        X_counts_test = cv.transform(test_text_data)
+
+        # Apply the same feature selection
+        X_selected_test = selector.transform(X_counts_test)
+
+        # Convert to binary presence/absence (as in your original code)
         X_features_test = (X_selected_test > 0).astype(int)
 
         # Create a DataFrame with the selected feature names
-        df_test = pd.DataFrame(X_features_test.toarray(), columns=model_trainer.selected_features)
-        
-        # Initialize the inference engine using the trained Bayesian network model.
-        infer = VariableElimination(model_trainer.trained_model)
+        df_test = pd.DataFrame(X_features_test.toarray(), columns=selected_features)
+
+        # 3) Perform inference using the trained model
+        infer = VariableElimination(trained_model)
         predictions = []
+
         for _, row in df_test.iterrows():
             # Build the evidence dictionary from the row (convert values to int)
             evidence = {col: int(row[col]) for col in df_test.columns}
 
-            # Query the network for the 'label' variable.
+            # Query the network for the 'label' variable
             query_result = infer.query(variables=["label"], evidence=evidence)
-            
-            # Pick the label with the highest probability.
+
+            # Pick the label with the highest probability
             predicted_label = query_result.values.argmax()
             predictions.append(predicted_label)
-            
+
         return predictions
     
-    def predict_bayesian_network_W2V(self, test_text_data, model_trainer):
+    def predict_bayesian_network_W2V(self, test_text_data, model_trainer=None, model_path=None):
         """
         Predicts labels using the trained Bayesian Network and word2vec-based sentence embeddings.
-
         Args:
-            test_text_data: List/Series of cleaned text strings.
-            model_trainer: A ModelTrainer instance with:
+            test_text_data (list or Series of str): Cleaned text strings to predict on.
+            model_trainer (object, optional): Instance of ModelTrainer containing:
                 - trained_model (BayesianNetwork)
                 - w2v_model (Word2Vec)
                 - discretizer (KBinsDiscretizer)
+              Defaults to None.
+            model_path (str, optional): Path to the file containing all artifacts. Defaults to None.
 
         Returns:
-            List of predicted labels.
+            list: Predicted labels for each text in 'test_text_data'.
         """
 
-        # Helper function: Compute average word embeddings
+        # ----------------------------
+        # 1) Determine how to load artifacts
+        # ----------------------------
+        if model_trainer is not None:
+            # Use artifacts directly from model_trainer
+            trained_model = model_trainer.trained_model
+            w2v_model = model_trainer.w2v_model
+            discretizer = model_trainer.discretizer
+        else:
+            # If model_trainer is None, check model_path
+            if model_path is None:
+                # Use a default path
+                model_path = os.path.join(MODEL_DIR, 'bayesian_network_W2V.pkl')
+
+            # Load artifacts from the saved file
+            with open(model_path, 'rb') as f:
+                artifacts = pickle.load(f)
+
+            trained_model = artifacts['trained_model']
+            w2v_model = artifacts['word2vec_model']
+            discretizer = artifacts['discretizer']
+            # If you saved feature_names, you can load them here as well:
+            # feature_names = artifacts['feature_names']
+
+        # Helper function to compute the average word embeddings
         def sentence_embedding(sentence, model):
             words = sentence.split()
             vectors = [model.wv[word] for word in words if word in model.wv]
             return np.mean(vectors, axis=0) if vectors else np.zeros(model.vector_size)
 
         # Convert test text into embeddings
-        X_w2v_test = np.array([sentence_embedding(text, model_trainer.w2v_model) for text in test_text_data])
+        X_w2v_test = np.array([sentence_embedding(text, w2v_model) for text in test_text_data])
 
         # Discretize using the trained discretizer
-        X_discrete_test = model_trainer.discretizer.transform(X_w2v_test)
+        X_discrete_test = discretizer.transform(X_w2v_test)
 
         # Clip values to avoid unseen bin numbers
-        X_discrete_test = np.clip(X_discrete_test, 0, model_trainer.discretizer.n_bins_[0] - 1)
+        X_discrete_test = np.clip(X_discrete_test, 0, discretizer.n_bins_[0] - 1)
 
-        # Create a DataFrame
+        # Create a DataFrame for the discretized features
         feature_names = [f"feat_{i}" for i in range(X_discrete_test.shape[1])]
         df_test = pd.DataFrame(X_discrete_test, columns=feature_names)
 
         # Ensure only features that exist in the trained Bayesian Network are used
-        model_nodes = list(model_trainer.trained_model.nodes())  # Convert to list
-        valid_columns = list(set(model_nodes) & set(df_test.columns))  # Select only matching columns
+        model_nodes = list(trained_model.nodes())
+        valid_columns = list(set(model_nodes) & set(df_test.columns))
         df_test = df_test[valid_columns]
 
         # Perform inference
-        infer = VariableElimination(model_trainer.trained_model)
+        infer = VariableElimination(trained_model)
         predictions = []
         for _, row in df_test.iterrows():
             evidence = {col: int(row[col]) for col in df_test.columns}
             query_result = infer.query(variables=["label"], evidence=evidence)
-            predictions.append(query_result.values.argmax())
+            predicted_label = query_result.values.argmax()
+            predictions.append(predicted_label)
 
         return predictions
 
@@ -296,5 +448,3 @@ class ModelPredictor:
                 predictions.append(most_common_sentiment)
         
         return np.array(predictions)
-    
-

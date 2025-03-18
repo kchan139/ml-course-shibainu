@@ -92,24 +92,15 @@ class ModelPredictor:
             # Generate raw prediction probabilities
             prediction_probs = model.predict(padded_sequences)
             
-            # Process results with custom threshold logic
+            # Process results without custom threshold logic
             results = []
             class_distribution = {0: 0, 1: 0, 2: 0}  # Track prediction distribution
-            
+
             for i, headline in enumerate(headlines):
                 probs = prediction_probs[i]
                 
-                # Apply custom threshold logic to combat class imbalance
-                # If no class exceeds threshold, pick highest probability
-                if not any(p > threshold for p in probs):
-                    predicted_class_idx = np.argmax(probs)
-                # Otherwise use custom logic to favor minority classes
-                elif probs[0] > threshold*0.8:  # Lower threshold for negative class
-                    predicted_class_idx = 0
-                elif probs[2] > threshold*0.8:  # Lower threshold for positive class
-                    predicted_class_idx = 2
-                else:
-                    predicted_class_idx = np.argmax(probs)
+                # Predict class based on highest probability only (no thresholds)
+                predicted_class_idx = np.argmax(probs)
                 
                 # Update class distribution counter
                 if predicted_class_idx in class_distribution:
@@ -128,12 +119,13 @@ class ModelPredictor:
                     }
                 }
                 results.append(result)
-            
+
             # Print class distribution for monitoring
             print("Prediction class distribution:")
             for class_idx, count in class_distribution.items():
                 sentiment = label_encoder.inverse_transform([class_idx])[0]
                 print(f"{sentiment} (class {class_idx}): {count} predictions")
+
             
             return results
             
@@ -184,9 +176,8 @@ class ModelPredictor:
                 print(f"No model found at {default_path}. Training a new model...")
                 # Train a new model if none exists
                 from src.models.train_model import ModelTrainer
-                from src.config import PROCESSED_DATA_PATH
                 
-                default_data_path = os.path.join(PROCESSED_DATA_PATH, "processed_dataset.csv")
+                default_data_path = os.path.join(RAW_DATA_PATH, "all-data.csv")
                 preprocessor = DataPreprocessor(default_data_path)
                 preprocessor.clean_data()
                 preprocessor.split_data()

@@ -141,17 +141,17 @@ class ModelTrainer:
             Embedding(max_words, embedding_dim),
             
             # Bidirectional LSTM for better context capture
-            Bidirectional(LSTM(64, return_sequences=True)),
+            Bidirectional(LSTM(128, return_sequences=True)),
             
             # Global max pooling to capture the most important features
             GlobalMaxPooling1D(),
             
             # Dropout for regularization
-            Dropout(0.4),
+            Dropout(0.5),
             
             # Hidden layer for better discrimination between classes
             Dense(64, activation='relu', kernel_regularizer=regularizers.l2(0.001)),
-            Dropout(0.3),
+            Dropout(0.4),
             
             # Output layer
             Dense(num_classes, activation='softmax')
@@ -193,21 +193,23 @@ class ModelTrainer:
         def custom_prediction(probs, threshold=0.4):
             predictions = []
             for prob in probs:
-                # If no class exceeds threshold, pick highest
+                # If no class exceeds the threshold, pick the class with the highest probability
                 if not any(p > threshold for p in prob):
                     predictions.append(np.argmax(prob))
-                # Otherwise use custom logic to favor minority classes slightly
-                elif prob[0] > threshold*0.9:  # Lower threshold for negative class
+                # Custom logic: Lower the threshold slightly for neutral and negative
+                elif prob[1] > threshold * 0.95:  # Neutral class (class 1)
+                    predictions.append(1)
+                elif prob[0] > threshold * 0.95:  # Negative class (class 0)
                     predictions.append(0)
-                elif prob[2] > threshold*0.9:  # Lower threshold for positive class
-                    predictions.append(2)
                 else:
-                    predictions.append(np.argmax(prob))
+                    predictions.append(np.argmax(prob))  # Default to the highest-probability class
             return np.array(predictions)
+
         
         # Evaluate with custom threshold
         y_pred_prob = model.predict(X_test_pad)
-        y_pred = custom_prediction(y_pred_prob)
+        # y_pred = custom_prediction(y_pred_prob)
+        y_pred = np.argmax(y_pred_prob, axis=1)
         
         # Convert one-hot encoded test data back to class indices for evaluation
         y_test_indices = np.argmax(y_test_cat, axis=1)
@@ -236,7 +238,7 @@ class ModelTrainer:
             'metrics': {
                 'accuracy': accuracy
             },
-            'custom_threshold': 0.3  # Save threshold for prediction
+            # 'custom_threshold': 0.4  # Save threshold for prediction
         }
         
         with open(model_path, 'wb') as file:
@@ -265,7 +267,7 @@ class ModelTrainer:
             preprocessor.split_data()
         
         if preprocessor is None:
-            default_path = os.path.join(PROCESSED_DATA_PATH, "processed_dataset.csv")
+            default_path = os.path.join(RAW_DATA_PATH, "all-data.csv")
             preprocessor = DataPreprocessor(default_path)
             preprocessor.clean_data()
             preprocessor.split_data()

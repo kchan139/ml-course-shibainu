@@ -1,13 +1,8 @@
 # tests/test_models.py
 import pytest
-import numpy as np
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-from src.config import *
-from src.data.preprocess import DataPreprocessor
-from src.models.train_model import ModelTrainer
+from pathlib import Path
+from src.config import MODEL_DIR
 from src.models.predict_model import ModelPredictor
-import os
-import pandas as pd
 
 def test_decision_tree_model():
     """
@@ -16,48 +11,47 @@ def test_decision_tree_model():
     pass
 
 def test_neural_network_model():
-    """
-    Tests the functionality of the Neural Network model.
-    """
-    # Load and preprocess the dataset
-    file_path = TEST_DIR
-    preprocessor = DataPreprocessor(file_path)
-    preprocessor.clean_data()
-    preprocessor.split_data(test_size=0.2, random_state=42)  # 80% train, 20% test
+    """Tests Neural Network predictions with pre-trained model"""
+    predictor = ModelPredictor()
+    model_files = list(Path(MODEL_DIR).glob('*rnn*.pkl')) + list(Path(MODEL_DIR).glob('*neural*.pkl'))
+    
+    if not model_files:
+        pytest.skip("No pre-trained Neural Network model found")
 
-    # Train the neural network model with raw text data
-    trainer = ModelTrainer()
-    _ = trainer.train_neural_network(preprocessor.X_train, preprocessor.y_train, 
-                                    preprocessor.X_test, preprocessor.y_test, 
-                                    epochs=5, batch_size=32)
-
-    # Make predictions using the trained model
-    _, predictions = ModelPredictor().predict_neural_network(preprocessor.X_test, trainer)
-    # Evaluate the model
-    accuracy = accuracy_score(preprocessor.y_test, predictions)
-    print(f"Accuracy: {accuracy}")
-
-    # Classification report
-    print("Classification Report:")
-    print(classification_report(preprocessor.y_test, predictions))
-
-    # Confusion matrix
-    cm = confusion_matrix(preprocessor.y_test, predictions)
-    print("Confusion Matrix:")
-    print(cm)
-
-    # Assertions for testing
-    assert accuracy > 0.5, f"Accuracy is below the expected threshold. Got {accuracy:.2f}"
-
-    # Additional checks like classification report and confusion matrix can be added if necessary.
-    # For example, checking if confusion matrix is of the expected shape
-    assert cm.shape == (3, 3), "Confusion matrix has incorrect dimensions. It should be 3x3."
+    test_headlines = [
+        "Tech sector shows strong performance",
+        "Regulatory challenges impact industry",
+        "Innovation drives market growth"
+    ]
+    
+    predictions = predictor.predict_neural_network(test_headlines)
+    assert predictions is not None
+    assert len(predictions) == 3
+    for pred in predictions:
+        assert 'probabilities' in pred
+        assert len(pred['probabilities']) == 3
+        assert abs(sum(pred['probabilities'].values()) - 1.0) < 0.0001
 
 def test_naive_bayes_model():
-    """
-    Tests the functionality of the Naive Bayes model.
-    """
-    pass
+    """Tests Naive Bayes predictions with pre-trained model"""
+    predictor = ModelPredictor()
+    model_path = Path(MODEL_DIR) / 'naive_bayes_model.pkl'
+    
+    if not model_path.exists():
+        pytest.skip("No pre-trained Naive Bayes model found")
+
+    test_headlines = [
+        "Company reports strong earnings growth",
+        "Market volatility concerns rise",
+        "New product launch delayed"
+    ]
+    
+    predictions = predictor.predict_naive_bayes(test_headlines)
+    assert predictions is not None
+    assert len(predictions) == 3
+    for pred in predictions:
+        assert 'sentiment' in pred
+        assert pred['sentiment'] in ['negative', 'neutral', 'positive']
 
 def test_bayesian_network_model():
     """

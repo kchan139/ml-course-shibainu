@@ -8,6 +8,8 @@ RAW_DATA_PATH = os.path.join(BASE_DIR, 'dataset', 'raw')
 PROCESSED_DATA_PATH = os.path.join(BASE_DIR, 'dataset', 'processed')
 EXTERNAL_DATA_PATH = os.path.join(BASE_DIR, 'dataset', 'external')
 
+TEST_DATA_PATH = os.path.join(BASE_DIR, 'dataset', 'test')
+
 # Model paths
 MODEL_DIR = os.path.join(BASE_DIR, 'models', 'trained')
 EXPERIMENT_DIR = os.path.join(BASE_DIR, 'models', 'experiments')

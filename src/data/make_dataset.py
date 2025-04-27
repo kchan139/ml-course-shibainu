@@ -7,10 +7,10 @@ class DatasetLoader:
     """
     This class handles the processing and saving of the dataset.
     """
-    def __init__(self):
+    def __init__(self, process_data_path=PROCESSED_DATA_PATH):
         # Initialize directories from config.py
         self.raw_dir = Path(RAW_DATA_PATH)
-        self.processed_dir = Path(PROCESSED_DATA_PATH)
+        self.processed_dir = Path(process_data_path)
         
 
     def load_data(self, file_path: str) -> pd.DataFrame:

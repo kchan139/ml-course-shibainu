@@ -1,6 +1,13 @@
 name: Run Unit Tests
 
-on: [push]
+on:
+  push:
+    branches: [ '*' ]
+    paths: ['src/**', 'tests/**', 'models/**', 'dataset/**']
+    
+  pull_request:
+    branches: [ 'main' ]
+    paths: ['src/**', 'tests/**', 'models/**', 'dataset/**']
 
 jobs:
   test:

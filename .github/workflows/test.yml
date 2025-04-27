@@ -3,11 +3,11 @@ name: Run Unit Tests
 on:
   push:
     branches: [ '*' ]
-    paths: ['src/**', 'tests/**', 'models/**', 'dataset/**']
+    paths: ['src/**', 'tests/**', 'models/**', 'dataset/**', '.github/workflows/**']
     
   pull_request:
     branches: [ 'main' ]
-    paths: ['src/**', 'tests/**', 'models/**', 'dataset/**']
+    paths: ['src/**', 'tests/**', 'models/**', 'dataset/**', '.github/workflows/**']
 
 jobs:
   test:

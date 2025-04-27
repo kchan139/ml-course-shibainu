@@ -8,7 +8,7 @@ seaborn
 pytest
 nltk
 wordcloud
-pgmpy
+pgmpy==0.1.21  # Pinned version for Bayesian Networks
 tensorflow
 datasets
 tf-keras

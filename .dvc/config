@@ -1,0 +1,7 @@
+[core]
+    remote = myremote
+['remote "myremote"']
+    url = gdrive://1GwG4cJm9nFuJu_ob_mf1fWgXS0h2yj-V
+    gdrive_service_account_json_file_path = ../secrets/machine-learning-242-bc1ef85e6426.json
+    gdrive_use_service_account = true
+    gdrive_acknowledge_abuse = true

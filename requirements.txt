@@ -1,0 +1,10 @@
+dvc
+dvc-gdrive
+mlflow
+
+joblib
+
+numpy
+scikit-learn
+
+pytest

@@ -1,3 +1,11 @@
+# DVC files
+.trash/
+processed/
+raw/
+experiments/
+trained_models/
+
+
 # MacOS metadata file
 .DS_Store
 
@@ -132,6 +140,7 @@ celerybeat.pid
 *.sage.py
 
 # Environments
+secrets/
 .env
 .venv
 env/

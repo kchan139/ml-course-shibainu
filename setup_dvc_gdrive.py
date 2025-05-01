@@ -24,7 +24,7 @@ def main():
     secrets_path = Path('secrets')
     secrets_path.mkdir(exist_ok=True)
 
-    key_path = secrets_path / 'key.json'
+    key_path = secrets_path / 'machine-learning-242-bc1ef85e6426.json'
     with open(key_path, 'wb') as file:
         file.write(key_data)
 

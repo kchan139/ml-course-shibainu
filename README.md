@@ -73,4 +73,3 @@ git push           # Push code changes to GitHub
 - Always run `dvc pull` after `git pull` to ensure you have the most up-to-date data
 - The `dvc_add.py` script handles tracking files with DVC - don't use `dvc add` directly
 - Remember to `dvc push` before `git push` to ensure your team can access the data
-```

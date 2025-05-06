@@ -42,16 +42,35 @@ source venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 ```
-## Get the Data
 
-1. **Run the setup script**  
-   ```bash
-   python setup_dvc_gdrive.py
-   ```  
-   - Paste the base64 string when prompted.  
-   - Follow the printed instruction to `export`/`set` `GOOGLE_APPLICATION_CREDENTIALS`.
+## DVC Workflow
 
-2. **Pull all DVC-tracked files**  
-   ```bash
-   dvc pull -r myremote
-   ```  
+This repository uses DVC (Data Version Control) to track large files and datasets. Follow these steps to work with the repository:
+
+### Getting Started
+
+When starting work on the project, always fetch the latest changes:
+
+```bash
+git pull           # Get latest code changes
+dvc pull           # Get latest data tracked by DVC
+```
+
+### Making Changes
+
+After making changes to DVC-tracked folders:
+
+```bash
+python dvc_add.py  # Add/update files to DVC tracking
+dvc push           # Push data changes to remote storage
+git add .          # Stage your changes including DVC metadata
+git commit -m "<message>"
+git push           # Push code changes to GitHub
+```
+
+### Important Notes
+
+- Always run `dvc pull` after `git pull` to ensure you have the most up-to-date data
+- The `dvc_add.py` script handles tracking files with DVC - don't use `dvc add` directly
+- Remember to `dvc push` before `git push` to ensure your team can access the data
+```

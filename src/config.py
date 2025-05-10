@@ -11,6 +11,10 @@ PROCESSED_DATA_PATH = os.path.join(BASE_DIR, 'dataset', 'processed')
 MODEL_DIR = os.path.join(BASE_DIR, 'models', 'trained_models')
 EXPERIMENT_DIR = os.path.join(BASE_DIR, 'models', 'experiments')
 
+# MLflow configuration
+MLFLOW_TRACKING_URI = f"file://{EXPERIMENT_DIR.resolve()}"
+MLFLOW_ARTIFACT_PATH = MODEL_DIR.resolve()
+
 # Log and report paths
 REPORTS_DIR = os.path.join(BASE_DIR, 'reports')
 FIGURES_DIR = os.path.join(REPORTS_DIR, 'figures')

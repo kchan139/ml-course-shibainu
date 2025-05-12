@@ -25,6 +25,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    # - name: Run quick smoke tests
-    #   run: |
-    #     pytest tests/ -q
+    - name: Run quick smoke tests
+      run: |
+        pytest tests/ -q

@@ -1,5 +1,6 @@
 import os
 import re
+import numpy as np
 import pandas as pd
 from collections import Counter
 from typing import List, Tuple, Any, Union
@@ -12,6 +13,8 @@ from nltk.util import ngrams
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 
+
+#========== DATA UTILS ==========#
 
 def preprocess_text(text: Any) -> List[str]:
     """
@@ -157,6 +160,104 @@ def remove_columns(input_file="dataset/raw/Reviews.csv",
     
     df_processed.to_csv(output_file, index=False)
     print(f"Processed dataset saved to {output_file}")
+
+
+#========== TEST UTILS ==========#
+
+def process_html_tags(input_file, output_file):
+    """
+    Process HTML tags in the dataset and add a column with cleaned text.
+    
+    Args:
+        input_file: Path to the input CSV file
+        output_file: Path to save the processed CSV file
+    """
+    df = pd.read_csv(input_file)
+    
+    df['Text_HTML_Clean'] = df['Text'].apply(clean_html)
+    
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    
+    df.to_csv(output_file, index=False)
+    print(f"Dataset with HTML cleaned text saved to {output_file}")
+
+
+def normalize_text_length(input_file, output_file, p95_threshold=None):
+    """
+    Normalize text length in dataset using truncation and add length features.
+    
+    Args:
+        input_file: Path to the input CSV file
+        output_file: Path to save the processed CSV file
+        p95_threshold: Threshold for truncation (default uses 95th percentile)
+    """
+    df = pd.read_csv(input_file)
+    df['Text_Length'] = df['Text_HTML_Clean'].apply(len)
+    
+    if p95_threshold is None:
+        p95_threshold = int(df['Text_Length'].quantile(0.95))
+    
+    df['Text_Normalized'] = df['Text_HTML_Clean'].apply(
+        lambda x: x[:p95_threshold] if len(x) > p95_threshold else x
+    )
+    
+    df['Length_Feature'] = np.log1p(df['Text_Length'])
+    df = categorize_text_length_df(df)
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    
+    df.to_csv(output_file, index=False)
+    print(f"Dataset with normalized text lengths saved to {output_file}")
+
+
+def categorize_text_length_df(df):
+    """
+    Add length category column to a dataframe.
+    
+    Args:
+        df: DataFrame with Text_HTML_Clean column
+        
+    Returns:
+        DataFrame with Length_Category column added
+    """
+    def get_length_category(length):
+        if length <= 100:
+            return 'Very Short'
+        elif length <= 250:
+            return 'Short'
+        elif length <= 500:
+            return 'Medium-Short'
+        elif length <= 750:
+            return 'Medium'
+        elif length <= 1000:
+            return 'Medium-Long'
+        elif length <= 1500:
+            return 'Long'
+        else:
+            return 'Very Long'
+    
+    if 'Text_Length' not in df.columns:
+        df['Text_Length'] = df['Text_HTML_Clean'].apply(len)
+    
+    df['Length_Category'] = df['Text_Length'].apply(get_length_category)
+    return df
+
+
+def categorize_text_length(input_file, output_file):
+    """
+    Categorize text by length and save as a new dataset.
+    
+    Args:
+        input_file: Path to the input CSV file
+        output_file: Path to save the processed CSV file
+    """
+    df = pd.read_csv(input_file)
+    
+    df = categorize_text_length_df(df)
+    
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    
+    df.to_csv(output_file, index=False)
+    print(f"Dataset with text length categories saved to {output_file}")
 
 
 if __name__ == "__main__":

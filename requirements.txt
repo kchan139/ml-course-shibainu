@@ -4,7 +4,11 @@ mlflow
 
 joblib
 
+wordcloud
 numpy
 scikit-learn
+nltk
+seaborn
+bs4
 
 pytest

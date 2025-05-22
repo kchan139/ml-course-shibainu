@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 # Base path
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -12,8 +13,8 @@ MODEL_DIR = os.path.join(BASE_DIR, 'models', 'trained_models')
 EXPERIMENT_DIR = os.path.join(BASE_DIR, 'models', 'experiments')
 
 # MLflow configuration
-MLFLOW_TRACKING_URI = f"file://{EXPERIMENT_DIR.resolve()}"
-MLFLOW_ARTIFACT_PATH = MODEL_DIR.resolve()
+MLFLOW_TRACKING_URI = f"file://{Path(EXPERIMENT_DIR).resolve()}"
+MLFLOW_ARTIFACT_PATH = str(Path(MODEL_DIR).resolve())
 
 # Log and report paths
 REPORTS_DIR = os.path.join(BASE_DIR, 'reports')

@@ -43,6 +43,15 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+## MLflow Experiment Tracking
+
+To monitor training experiments and models:
+```bash
+# Start MLflow tracking server
+mlflow ui --backend-store-uri models/experiments
+```
+Access the dashboard at: http://localhost:5000
+
 ## DVC Workflow
 
 This repository uses DVC (Data Version Control) to track large files and datasets. Follow these steps to work with the repository:

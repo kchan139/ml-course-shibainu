@@ -13,7 +13,7 @@ MODEL_DIR = os.path.join(BASE_DIR, 'models', 'trained_models')
 EXPERIMENT_DIR = os.path.join(BASE_DIR, 'models', 'experiments')
 
 # MLflow configuration
-MLFLOW_TRACKING_URI = f"file://{Path(EXPERIMENT_DIR).resolve()}"
+MLFLOW_TRACKING_URI = f"file:///{str(Path(EXPERIMENT_DIR).resolve()).replace('\\', '/')}"
 MLFLOW_ARTIFACT_PATH = str(Path(MODEL_DIR).resolve())
 
 # Log and report paths

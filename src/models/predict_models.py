@@ -1,6 +1,5 @@
 import mlflow
 import numpy as np
-from src.config import MLFLOW_ARTIFACT_PATH
 
 class ModelPredictor:
     @staticmethod

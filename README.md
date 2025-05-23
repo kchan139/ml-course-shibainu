@@ -86,7 +86,7 @@ git push           # Push code changes to GitHub
 
 ## Model Comparison
 
-The project implemented six different models for sentiment analysis: Logistic Regression, Gradient Boosting, Random Forest, Support Vector Machine (SVM), Kernel Support Vector Machine, and Conditional Random Fields (CRF)[cite: 9]. Below is a summary of the best-performing configurations and their key metrics for the models where detailed information was available:
+The project implemented six different models for sentiment analysis: Logistic Regression, Gradient Boosting, Random Forest, Support Vector Machine (SVM), Kernel Support Vector Machine, and Conditional Random Fields (CRF). Below is a summary of the best-performing configurations and their key metrics for the models where detailed information was available:
 
 ### Logistic Regression
 - **Best Hyperparameters**: C: 5.0, Penalty: l2, Solver: liblinear
@@ -95,7 +95,7 @@ The project implemented six different models for sentiment analysis: Logistic Re
 - **Test Precision**: 0.8743
 - **Test Recall**: 0.8790
 - **Train Accuracy**: 0.9468
-- **Analysis**: A higher 'C' value (5.0) minimized regularization, outperforming lower 'C' values despite a noticeable generalization gap. The L2 penalty was effective in preserving predictive signals, and the `liblinear` solver proved robust for this binary classification problem with a medium-sized dataset[cite: 31, 32, 33, 34, 35, 36].
+- **Analysis**: A higher 'C' value (5.0) minimized regularization, outperforming lower 'C' values despite a noticeable generalization gap. The L2 penalty was effective in preserving predictive signals, and the `liblinear` solver proved robust for this binary classification problem with a medium-sized dataset.
 
 ### Gradient Boosting
 - **Best Hyperparameters**: n_estimators: 200, learning_rate: 0.2, max_depth: 7
@@ -103,7 +103,7 @@ The project implemented six different models for sentiment analysis: Logistic Re
 - **Test F1 Score**: 0.8398
 - **Test Precision**: 0.8483
 - **Test Recall**: 0.8538
-- **Analysis**: The optimal configuration leveraged a sufficient number of estimators, an aggressive learning rate, and deep trees to capture complex patterns and rich feature interactions essential for sentiment analysis[cite: 43, 44, 45, 46, 47].
+- **Analysis**: The optimal configuration leveraged a sufficient number of estimators, an aggressive learning rate, and deep trees to capture complex patterns and rich feature interactions essential for sentiment analysis.
 
 ### Random Forest
 - **Best Hyperparameters**: n_estimators: 200, max_depth: None, min_samples_split: 2
@@ -111,7 +111,7 @@ The project implemented six different models for sentiment analysis: Logistic Re
 - **Test F1 Score**: 0.7577
 - **Test Precision**: 0.8391
 - **Test Recall**: 0.8111
-- **Analysis**: Feature importance analysis highlighted words like "waste", "excellent", "perfect", and "disappointed" as highly influential in sentiment prediction[cite: 53].
+- **Analysis**: Feature importance analysis highlighted words like "waste", "excellent", "perfect", and "disappointed" as highly influential in sentiment prediction.
 
 *(Note: Detailed performance metrics for Support Vector Machine (SVM), Kernel Support Vector Machine, and Conditional Random Fields (CRF) were not available in the provided PDF content.)*
 
